@@ -443,13 +443,13 @@
 
            ]
 
-       (doseq [item (coll-get @oref)]
+       (doseq [item (coll-transform (get-in oref attr))]
          (dom/append coll-obj (make-item-fn item)))
 
        (bind-change oref attr
                     (fn [old new]
                       (let [children (vec (map get-from-dom (dom/children coll-obj)))
-                            new-coll (coll-get new)
+                            new-coll (vec (coll-transform new))
                             count-children (count children)
                             count-new (count new-coll)
                             diff (- count-new count-children)
