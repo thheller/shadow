@@ -31,6 +31,12 @@
     placeholder-node
     ))
 
+(defn int-type []
+  (reify IInputType
+    (-dom-type [this] "number")
+    (-validate [this value] {:valid true :value (js/parseInt value)})
+    (-encode [this val]
+      (str val))))
 
 (defn text-type
   ([] (text-type (fn [val] {:valid true :value val})))
@@ -78,6 +84,43 @@
         (if (check-fn f)
           idx
           (recur (rest items) (inc idx)))))))
+
+(defn dom-select-grouped [obj attr type options-key select-attrs]
+  (when-not (satisfies? IInputType type)
+    (throw (ex-info "dom select type must support protocol InputType" {:type type})))
+
+  ;; options-key should point to options in obj (I may want to bind to them!)
+  ;; options should be [["group label" [[value "label"]
+  ;;                                    [value "label"]]]
+
+  (let [path (if (vector? attr) attr [attr])
+        init-val (get-in obj path)
+        options (get obj options-key)
+
+        _ (when-not (vector? options)
+            (throw (ex-info "select options should be a vector" {:options options})))
+
+        select (dom/build [:select select-attrs
+                           (for [[group-label group-options] options]
+                             [:optgroup {:label group-label}
+                              (for [[value label] group-options]
+                                [:option {:value (-encode type value)
+                                          :selected (when (= init-val value) true)}
+                                 (str label)])])
+                           ])]
+
+    (dom/on select :change
+            (fn [ev]
+              (let [sv (dom/get-value select)
+                    {:keys [valid value error]} (-validate type sv)]
+                (obj/notify! obj :input-validated attr valid value error)
+                (if valid
+                  (obj/notify! obj :input-change attr value select)
+                  (obj/log "dom-select-grouped with invalid value?" obj attr value select)
+                  ))))
+
+    select
+    ))
 
 (defn dom-select [obj attr type options-key select-attrs]
   (when-not (satisfies? IInputType type)

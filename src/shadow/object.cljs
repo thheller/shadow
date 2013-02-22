@@ -368,6 +368,9 @@
      (update! oref update-in [::reactions] merge-reactions map)))
 
 (defn bind-change [oref attr callback]
+  (when-not (satisfies? IObject oref)
+    (throw (ex-info "binding currently only supports shadow objects, other atoms might leak, may add later" {:oref oref :attr attr})))
+
   (let [attr (if (vector? attr) attr [attr])]
     (add-watch oref (gensym "bind-change")
                (fn [_ _ old new]
@@ -377,28 +380,21 @@
                      (callback ov nv)))))))
 
 (defn bind
-  "[oref attr node-gen] produces a node via (node-gen (get-in oref [attr]))
+  "[oref attr node-gen] produces a node via (node-gen new-value)
    watches obj for changes and replaces the generated node on change (node-gen defaults to str)"
   ([oref attr] (bind oref attr str))
   ([oref attr node-gen]
      (let [attr (if (vector? attr) attr [attr])
-           node-get #(dom/build (node-gen (get-in % attr)))
-           node (atom (node-get @oref))
+           node-get #(dom/build (node-gen %))
+           node (atom (node-get (get-in oref attr)))
            bind-key (gensym "bind")]
 
-       (add-watch oref bind-key
-                  (fn [_ _ old new]
-                    (let [ov (get-in old attr)
-                          nv (get-in new attr)]
-
-                      (when-not (= ov nv)
-                        (let [new-node (node-get new)
-                              current-node @node]
-
-                          (dom/replace-node current-node new-node)
-                          (reset! node new-node))
-                        ))
-                    ))
+       (bind-change oref attr
+                    (fn [old new]
+                      (let [new-node (node-get new)
+                            current-node @node]
+                        (dom/replace-node current-node new-node)
+                        (reset! node new-node))))
 
        @node)
      ))
@@ -425,8 +421,6 @@
 
            coll-get #(vec (coll-transform (get-in % attr)))
 
-           watch-key (gensym "bind-children")
-
            make-item-fn (fn [[key val]]
                           (let [obj (create item-type {:parent oref
                                                        ::coll-path attr
@@ -452,45 +446,39 @@
        (doseq [item (coll-get @oref)]
          (dom/append coll-obj (make-item-fn item)))
 
-       (add-watch oref watch-key
-                  (fn [_ _ old new]
-                    ;; avoid doing coll-transform to look for changes?
-                    (let [ov (get-in old attr)
-                          nv (get-in new attr)]
+       (bind-change oref attr
+                    (fn [old new]
+                      (let [children (vec (map get-from-dom (dom/children coll-obj)))
+                            new-coll (coll-get new)
+                            count-children (count children)
+                            count-new (count new-coll)
+                            diff (- count-new count-children)
 
-                      (when-not (= ov nv)
+                            ;; exit lost children
+                            children (if (neg? diff)
+                                       (coll-destroy-children children count-children diff)
+                                       children)
+                            count-children (min count-new count-children)]
 
-                        (let [children (vec (map get-from-dom (dom/children coll-obj)))
-                              new-coll (coll-get new)
-                              count-children (count children)
-                              count-new (count new-coll)
-                              diff (- count-new count-children)
+                        ;; update current
+                        (dotimes [idx count-children]
+                          (let [cc (nth children idx)
+                                ckey (::coll-key cc)
+                                cval (get cc item-key)
+                                [nkey nval] (nth new-coll idx)]
 
-                              ;; exit lost children
-                              children (if (neg? diff)
-                                         (coll-destroy-children children count-children diff)
-                                         children)
-                              count-children (min count-new count-children)]
+                            ;; only update when something changes
+                            (when-not (and (= ckey nkey) (= cval nval))
+                              (update! cc assoc item-key nval ::coll-key nkey)
+                              )))
 
-                          ;; update current
-                          (dotimes [idx count-children]
-                            (let [cc (nth children idx)
-                                  ckey (::coll-key cc)
-                                  cval (get cc item-key)
-                                  [nkey nval] (nth new-coll idx)]
+                        ;; enter new
+                        (when (pos? diff)
+                          (doseq [item (subvec new-coll count-children count-new)]
+                            (dom/append coll-obj (make-item-fn item))))
 
-                              ;; only update when something changes
-                              (when-not (and (= ckey nkey) (= cval nval))
-                                (update! cc assoc item-key nval ::coll-key nkey)
-                                )))
-
-                          ;; enter new
-                          (when (pos? diff)
-                            (doseq [item (subvec new-coll count-children count-new)]
-                              (dom/append coll-obj (make-item-fn item))))
-
-                          (notify! oref :bind-children-update)
-                          )))))
+                        (notify! oref :bind-children-update)
+                        )))
 
        coll-obj)))
 
