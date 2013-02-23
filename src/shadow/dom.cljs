@@ -129,10 +129,32 @@
   ([node] (dom/append (.-body js/document) (-to-dom node)))
   ([el node] (dom/append (-to-dom el) (-to-dom node))))
 
-(defn nodelist->vector [nl]
-  (js* "function(x) { var y = []; for (i = 0; i < x.length; i++) { y.push(x[i]); }; return cljs.core.PersistentVector.fromArray(y); }(~{nl});"))
+(defn- lazy-native-coll-seq [coll idx]
+  (when (< idx (.-length coll))
+    (lazy-seq (cons (aget coll idx)
+                    (lazy-native-coll-seq coll (inc idx))))
+    ))
+
+(deftype NativeColl [coll]
+  IDeref
+  (-deref [this] coll)
+
+  IIndexed
+  (-nth [this n] (aget coll n))
+  (-nth [this n not-found] (or (aget coll n) not-found))
+
+  ICounted
+  (-count [this] (.-length coll))
+
+  ISeqable
+  (-seq [this] (lazy-native-coll-seq coll 0))
+
+  )
 
 (comment ;; IE cannot dispatch protocols on "native" types apparently
+  (defn nodelist->vector [nl]
+    (js* "function(x) { var y = []; for (i = 0; i < x.length; i++) { y.push(x[i]); }; return cljs.core.PersistentVector.fromArray(y); }(~{nl});"))
+
   (when (js* "(typeof NodeList != 'undefined')")
     (extend-protocol clojure.core/ISeqable
       js/NodeList
@@ -149,8 +171,8 @@
   ([sel root] (.querySelector (-to-dom root) sel)))
 
 (defn query
-  ([sel] (nodelist->vector (.querySelectorAll js/document sel)))
-  ([sel root] (nodelist->vector (.querySelectorAll (-to-dom root) sel))))
+  ([sel] (NativeColl. (.querySelectorAll js/document sel)))
+  ([sel root] (NativeColl. (.querySelectorAll (-to-dom root) sel))))
 
 (defn- dom-listen [el ev handler]
   (.addEventListener el ev handler))
@@ -222,14 +244,20 @@
 (defn checked? [el] (.-checked (-to-dom el)))
 
 (defn form-elements [el]
-  (nodelist->vector (.-elements (-to-dom el))))
+  (NativeColl. (.-elements (-to-dom el))))
 
 (defn children [el]
-  (nodelist->vector (.-children (-to-dom el))))
+  (NativeColl. (.-children (-to-dom el))))
 
 (defn attr
   ([el key] (.getAttribute (-to-dom el) (name key)))
   ([el key default] (or (.getAttribute (-to-dom el) (name key)) default)))
+
+;; dont ever include a script including this in <head>!
+(def data (if (.. js/document -body -dataset)
+            (fn data [el key] (aget (-> el -to-dom .-dataset) (name key)))
+            (fn data [el key] (attr el key)) ;; fallback
+            ))
 
 (defn set-attr [el key value]
   (dom/setProperties (-to-dom el) (clj->js {key value})))

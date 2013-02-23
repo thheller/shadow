@@ -137,7 +137,7 @@
   (get @instances id))
 
 (defn ^:export get-from-dom [dom]
-  (let [oid (dom/attr dom :data-oid)]
+  (let [oid (dom/data dom :oid)]
     (when-not oid
       (throw (ex-info "get-from-dom only works on nodes created via obj/create" {:dom dom})))
 
@@ -377,7 +377,7 @@
 
   (let [attr (if (vector? attr) attr [attr])]
     (add-watch oref (gensym "bind-change")
-               (fn [_ _ old new]
+               (fn bind-change-watch [_ _ old new]
                  (let [ov (get-in old attr)
                        nv (get-in new attr)]
                    (when-not (= ov nv)
@@ -444,7 +444,7 @@
          (dom/append coll-dom (make-item-fn item)))
 
        (bind-change oref attr
-                    (fn [old new]
+                    (fn bind-children-watch [old new]
                       (let [children (.-children coll-dom)
                             new-coll (vec (coll-transform new))
                             count-children (.-length children)

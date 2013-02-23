@@ -9,15 +9,17 @@
 (set! *print-fn* (fn [s] (when-not (= s "\n")
                            (.log js/console s))))
 
-(def cycles 100)
+(def cycles 1000)
 
 (defn run-cycle [app]
   (so/log "going for" cycles)
-  (time
-   (dotimes [n cycles]
-     (so/update! app update-in [:items (rand-int 100)] inc)
-     ;; (so/update! app assoc :items (vec (map rand-int (range 100))))
-     )))
+  (let [prof (str cycles " cycles")]
+    (.profile js/console prof)
+    (dotimes [n cycles]
+      (so/update! app update-in [:items (rand-int 100)] inc)
+      ;; (so/update! app assoc :items (vec (map rand-int (range 100))))
+      )
+    (.profileEnd js/console prof)))
 
 (so/define ::app
   :dom (fn [this]
