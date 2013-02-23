@@ -445,9 +445,9 @@
 
        (bind-change oref attr
                     (fn bind-children-watch [old new]
-                      (let [children (.-children coll-dom)
+                      (let [children (dom/children coll-dom)
                             new-coll (vec (coll-transform new))
-                            count-children (.-length children)
+                            count-children (count children)
                             count-new (count new)
                             diff (- count-new count-children)
 
@@ -460,7 +460,7 @@
 
                         ;; update current
                         (dotimes [idx count-children]
-                          (let [cn (aget children idx)
+                          (let [cn (nth children idx)
                                 cc (get-from-dom cn)
                                 ckey (::coll-key cc)
                                 cval (get cc item-key)
