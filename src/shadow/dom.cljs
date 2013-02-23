@@ -253,14 +253,23 @@
   ([el key] (.getAttribute (-to-dom el) (name key)))
   ([el key default] (or (.getAttribute (-to-dom el) (name key)) default)))
 
-;; dont ever include a script including this in <head>!
-(def data (if (.. js/document -body -dataset)
-            (fn data [el key] (aget (-> el -to-dom .-dataset) (name key)))
-            (fn data [el key] (attr el key)) ;; fallback
-            ))
-
 (defn set-attr [el key value]
   (dom/setProperties (-to-dom el) (clj->js {key value})))
+
+;; dont ever include a script including this in <head>!
+(def data (if (.. js/document -body -dataset)
+            (fn data-dataset [el key]
+              (aget (-> el -to-dom .-dataset) (name key)))
+            (fn data-get-attribute [el key]
+              (.getAttribute (-to-dom el) (str "data-" (name key)))) ;; fallback
+            ))
+
+(def set-data (if (.. js/document -body -dataset)
+                (fn set-data-dataset [el key value]
+                  (aset (-> el -to-dom .-dataset) (name key) (str value)))
+                (fn set-data-set-attribute [el key value]
+                  (.setAttribute (-to-dom el) (str "data-" (name key)) (str value)))
+                ))
 
 (defn ancestor-by-class [el cls]
   (dom/getAncestorByClass (-to-dom el) cls))

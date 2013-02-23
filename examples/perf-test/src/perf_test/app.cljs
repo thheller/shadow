@@ -9,30 +9,41 @@
 (set! *print-fn* (fn [s] (when-not (= s "\n")
                            (.log js/console s))))
 
-(def cycles 100)
+(def cycles 1000)
 
 (defn run-cycle [app]
   (so/log "going for" cycles)
   (let [prof (str cycles " cycles")]
     (.profile js/console prof)
-    (dotimes [n cycles]
-      (so/update! app update-in [:items (rand-int 100)] inc)
-      ;; (so/update! app assoc :items (vec (map rand-int (range 100))))
-      )
+    (time
+     (dotimes [n cycles]
+       (so/update! app update-in [:items (rand-int 100)] inc)
+       ;; (so/update! app assoc :items (vec (map rand-int (range 100))))
+       ))
     (.profileEnd js/console prof)))
+
+(defn run-animation [app]
+  (let [frame-fn (fn frame-fn []
+                   (so/update! app update-in [:items (rand-int 100)] inc)
+                   (.requestAnimationFrame js/window frame-fn)
+                   )]
+    (.requestAnimationFrame js/window frame-fn)
+    ))
 
 (so/define ::app
   :dom (fn [this]
          [:div#app
           [:h1 "Shadow Perf Test"]
           [:button.go "Go!"]
+          [:button.anim "Inifinite Animation!"]
 
           (so/bind-children :ul.items
                             this :items
                             ::item :value)
           ])
 
-  :dom-events [[:click "button.go"] run-cycle])
+  :dom-events [[:click "button.go"] run-cycle
+               [:click "button.anim"] run-animation])
 
 (defn ^:export go []
   (so/log "going")

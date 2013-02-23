@@ -103,7 +103,9 @@
 (defprotocol IObject
   (-id [this])
   (-type [this])
-  (-data [this]))
+  (-data [this])
+  (-update [this update-fn] "update and notify watches")
+  (-update-direct [this update-fn] "update but dont notify watches"))
 
 (defn get-type-attr
   ([oref key] (get-in @object-defs [(-type oref) key]))
@@ -125,8 +127,20 @@
     (throw (str "update! expects a fn as second arg, not " (pr-str update-fn))))
 
   (let [id (-id oref)
-        data (-data oref)]
-    (swap! data (fn [data] (apply update-fn data args)))
+        data (-data oref)
+        work-fn (fn [data] (apply update-fn data args))]
+    (-update oref work-fn)
+    (notify! oref :updated)
+    ))
+
+(defn update-direct! [oref update-fn & args]
+  (when-not (fn? update-fn)
+    (throw (str "update-direct! expects a fn as second arg, not " (pr-str update-fn))))
+
+  (let [id (-id oref)
+        data (-data oref)
+        work-fn (fn [data] (apply update-fn data args))]
+    (-update-direct oref work-fn)
     (notify! oref :updated)
     ))
 
@@ -143,9 +157,6 @@
 
     (get-by-id (js/parseInt oid))
     ))
-
-(defn ^:export get-object-data [oref]
-  @(-data oref))
 
 (defn ^:export get-parent [oref]
   (when-let [parent-id (get @instance-parent (-id oref))]
@@ -233,7 +244,7 @@
           dom (dom/build (dom-fn this))]
 
       ;; js/Text cant have attr, but no object should ever have text as root node?
-      (dom/set-attr dom :data-oid (-id this))
+      (dom/set-data dom :oid (-id this))
 
       (update! this assoc ::dom dom)
       (bind-dom-events this dom dom-events)
@@ -292,11 +303,20 @@
         )))
 
 
-(deftype ObjectRef [id type data]
+(deftype ObjectRef [id type ^:mutable data ^:mutable watches]
   IObject
   (-id [this] id)
   (-type [this] type)
   (-data [this] data)
+  (-update [this update-fn]
+    (let [old data
+          new (update-fn data)]
+      (set! data new)
+      (doseq [[key watch-fn] watches]
+        (watch-fn key this old new))))
+
+  (-update-direct [this update-fn]
+    (set! data (update-fn data)))
 
   IEquiv
   (-equiv [this other]
@@ -304,7 +324,7 @@
          (= (-id this) (-id other))))
 
   IDeref
-  (-deref [this] @data)
+  (-deref [this] data)
 
   IPrintWithWriter
   (-pr-writer [this writer opts]
@@ -312,28 +332,28 @@
 
   IWatchable
   (-notify-watches [this oldval newval]
-    (-notify-watches data oldval newval))
+    (throw (js/Error. "who be calling?")))
   (-add-watch [this key f]
-    (-add-watch data key f))
+    (set! watches (assoc watches key f)))
   (-remove-watch [this key]
-    (-remove-watch data key))
+    (set! watches (dissoc watches key)))
 
   ILookup
   (-lookup [this k]
     (if (= :parent k)
       (get-parent this)
-      (get @data k)))
+      (get data k)))
   (-lookup [this k d]
     (if (= :parent k)
       (or (get-parent this) k)
-      (get @data k d)))
+      (get data k d)))
 
   Object
   (toString [this]
     (pr-str this))
 
   dom/IElement
-  (-to-dom [this] (::dom this))
+  (-to-dom [this] (::dom data))
   )
 
 (defn create [type obj]
@@ -343,13 +363,15 @@
     (throw (ex-info "obj/create second arg must be a map" {:obj obj})))
 
   (let [oid (next-id)
+        parent (:parent obj)
+
         obj (-> obj
                 (assoc ::object-id oid
                        ::reactions (get-in @object-defs [type ::reactions] {}))
-                (merge-defaults type))
-        parent (:parent obj)
-        obj-atom (atom (dissoc obj :parent))
-        oref (ObjectRef. oid type obj-atom)]
+                (merge-defaults type)
+                (dissoc :parent))
+
+        oref (ObjectRef. oid type obj {})]
 
     ;; dont use oref before this
     (swap! instances assoc oid oref)
@@ -426,15 +448,18 @@
                                                        item-key val})]
 
                             (bind-change obj item-key
-                                       (fn [_ new]
-                                         ;; FIXME: this wont work for sets, only vec and map
+                                         (fn [_ new]
+                                           ;; FIXME: this wont work for sets, only vec and map
 
-                                         ;; TODO: updating here will also trigger the watch below
-                                         ;; which will do a whole lot of work for nothing?
-                                         ;; remove-watch/add-watch is not an option since you dont get the function
-                                         ;; via remove-watch
-                                         (update! oref assoc-in (conj attr key) new)
-                                         ))
+                                           ;; this is also called when the parent coll is updated
+                                           ;; kinda doing double work
+                                           (let [parent-key (conj attr (::coll-key obj))
+                                                 coll-val (get-in oref parent-key)]
+                                             ;; only update when its not current, aka child updated itself
+                                             (when-not (= coll-val new)
+                                               (log "direct child update" key parent-key new coll-val)
+                                               (update! oref assoc-in parent-key new)
+                                               ))))
                             obj
                             ))
 
