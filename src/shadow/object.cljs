@@ -93,6 +93,10 @@
   "called after obj/update! completed"
   [])
 
+(define-event :bind-children-update
+  "need to rethink this"
+  [])
+
 (defn behavior* [& args]
   (warn "defbehavior is gone" (first args)))
 
@@ -399,9 +403,6 @@
        @node)
      ))
 
-(define ::bound-collection
-  :dom ::coll-root)
-
 (defn coll-destroy-children [children c diff]
   ;; whats more efficient in the DOM, drop head or tail?
   ;; diff is neg!
@@ -414,12 +415,8 @@
      (bind-children node oref attr item-type item-key #(map-indexed vector %)))
   ([node oref attr item-type item-key coll-transform]
      (let [attr (if (vector? attr) attr [attr])
-           coll-obj (create ::bound-collection {:parent oref
-                                                ::coll-root node
-                                                ::coll-path attr
-                                                ::coll-item-key item-key})
 
-           coll-get #(vec (coll-transform (get-in % attr)))
+           coll-dom (dom/build node)
 
            make-item-fn (fn [[key val]]
                           (let [obj (create item-type {:parent oref
@@ -444,14 +441,14 @@
            ]
 
        (doseq [item (coll-transform (get-in oref attr))]
-         (dom/append coll-obj (make-item-fn item)))
+         (dom/append coll-dom (make-item-fn item)))
 
        (bind-change oref attr
                     (fn [old new]
-                      (let [children (vec (map get-from-dom (dom/children coll-obj)))
+                      (let [children (.-children coll-dom)
                             new-coll (vec (coll-transform new))
-                            count-children (count children)
-                            count-new (count new-coll)
+                            count-children (.-length children)
+                            count-new (count new)
                             diff (- count-new count-children)
 
                             ;; exit lost children
@@ -460,9 +457,11 @@
                                        children)
                             count-children (min count-new count-children)]
 
+
                         ;; update current
                         (dotimes [idx count-children]
-                          (let [cc (nth children idx)
+                          (let [cn (aget children idx)
+                                cc (get-from-dom cn)
                                 ckey (::coll-key cc)
                                 cval (get cc item-key)
                                 [nkey nval] (nth new-coll idx)]
@@ -475,12 +474,12 @@
                         ;; enter new
                         (when (pos? diff)
                           (doseq [item (subvec new-coll count-children count-new)]
-                            (dom/append coll-obj (make-item-fn item))))
+                            (dom/append coll-dom (make-item-fn item))))
 
                         (notify! oref :bind-children-update)
                         )))
 
-       coll-obj)))
+       coll-dom)))
 
 (defn remove-from-vector [coll key]
   (let [c (count coll)]

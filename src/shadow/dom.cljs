@@ -228,8 +228,8 @@
   (nodelist->vector (.-children (-to-dom el))))
 
 (defn attr
-  ([el key] (.getAttribute el (name key)))
-  ([el key default] (or (.getAttribute el (name key)) default)))
+  ([el key] (.getAttribute (-to-dom el) (name key)))
+  ([el key default] (or (.getAttribute (-to-dom el) (name key)) default)))
 
 (defn set-attr [el key value]
   (dom/setProperties (-to-dom el) (clj->js {key value})))

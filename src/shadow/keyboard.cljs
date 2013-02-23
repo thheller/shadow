@@ -78,6 +78,7 @@
       (let [key-id (key-id-from-event e)]
         (loop [handlers @key-handlers]
           (if (empty? handlers)
+            nil ;; stop
             (let [{:keys [oref keymap]} (first handlers)
                   handler (get keymap key-id)]
               (if handler
