@@ -328,7 +328,7 @@
 
   IPrintWithWriter
   (-pr-writer [this writer opts]
-    (-write writer (str "#<ObjectRef {:id " id ", :type " type ", :data " data "}>")))
+    (-write writer (str "#<ObjectRef {:id " id ", :type " type "}>")))
 
   IWatchable
   (-notify-watches [this oldval newval]
@@ -384,8 +384,7 @@
     (when-let [dom (dom-init oref)]
       (notify! oref :dom-init dom))
 
-    oref
-    ))
+    oref))
 
 (defn add-reaction!
   ([oref ev handler-fn]

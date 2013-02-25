@@ -233,6 +233,36 @@
     input
     ))
 
+(defn dom-textarea [obj attr type attrs]
+  (so/log obj attr type attrs)
+  (when-not (satisfies? IInputType type)
+    (throw (ex-info "dom input type must support protocol InputType" {:type type :attr attr :attrs attrs})))
+
+  (let [path (if (vector? attr) attr [attr])
+        init-val (get-in obj path)
+        init-sval (:value attrs)
+        init-sval (if (nil? init-val)
+                    ""
+                    (-encode type init-val))
+
+        input (dom/build [:textarea (dissoc attrs :bind) init-sval])]
+
+    (when (:bind attrs)
+      (so/bind-change obj path
+                       (fn [old new]
+                         (dom/set-value input (-encode type new))
+                         )))
+
+    (dom/on input :change (fn [e]
+                            (let [sval (dom/get-value input)
+                                  {:keys [valid error value]} (-validate type sval)]
+                              (so/notify! obj :input-validated attr valid sval error)
+                              (when valid
+                                (so/notify! obj :input-change attr value input)))
+                            ))
+
+    input
+    ))
 
 (def timeouts (atom {}))
 
