@@ -90,7 +90,7 @@
   [[:dom "the dom that was created"]])
 
 (define-event :updated
-  "called after obj/update! completed"
+  "called after so/update! completed"
   [])
 
 (define-event :bind-children-update
@@ -153,7 +153,7 @@
 (defn ^:export get-from-dom [dom]
   (let [oid (dom/data dom :oid)]
     (when-not oid
-      (throw (ex-info "get-from-dom only works on nodes created via obj/create" {:dom dom})))
+      (throw (ex-info "get-from-dom only works on nodes created via so/create" {:dom dom})))
 
     (get-by-id (js/parseInt oid))
     ))
@@ -251,14 +251,17 @@
       dom
       )))
 
-(defn- reaction-merge [result event handler]
+(defn- reaction-merge [result [event handler]]
   (let [current (get result event (list))]
     (assoc result event (conj current handler))))
 
 (defn- merge-reactions [result behavior]
-  (when-not (map? behavior)
-    (throw (ex-info "behaviors must be maps" {:behavior behavior})))
-  (reduce-kv reaction-merge result behavior))
+  (when-not (vector? behavior)
+    (throw (ex-info "behaviors must be vectors" {:behavior behavior})))
+  (when-not (even? (count behavior))
+    (throw (ex-info "invalid behavior" {:behavior behavior})))
+
+  (reduce reaction-merge result (partition 2 behavior)))
 
 (defn define [id & args]
   (when-not (even? (count args))
@@ -268,11 +271,8 @@
 
   (let [odef (apply hash-map args)
 
-        reactions (merge-reactions {} (apply hash-map (:on odef [])))
-        reactions (reduce merge-reactions
-                          reactions
-                          ;; reverse order seems more logical (aka apply in order they are given)
-                          (reverse (get odef :behaviors [])))
+        reactions (merge-reactions {} (:on odef []))
+        reactions (merge-reactions reactions (:behaviors odef []))
 
         odef (assoc odef
                ::id id
@@ -360,7 +360,7 @@
   (when-not (contains? @object-defs type)
     (throw (ex-info (str "cannot create unknown child type: " type) {:type type :obj obj})))
   (when-not (map? obj)
-    (throw (ex-info "obj/create second arg must be a map" {:obj obj})))
+    (throw (ex-info "so/create second arg must be a map" {:obj obj})))
 
   (let [oid (next-id)
         parent (:parent obj)
@@ -389,9 +389,9 @@
 
 (defn add-reaction!
   ([oref ev handler-fn]
-     (add-reaction! oref {ev handler-fn}))
-  ([oref map]
-     (update! oref update-in [::reactions] merge-reactions map)))
+     (add-reaction! oref [ev handler-fn]))
+  ([oref list]
+     (update! oref update-in [::reactions] merge-reactions list)))
 
 (defn bind-change [oref attr callback]
   (when-not (satisfies? IObject oref)
@@ -534,7 +534,7 @@
         path (::coll-path oref)]
 
     (when-not (and key path)
-      (throw (ex-info "remove-in-parent! should only be called from items created via obj/bind-children" {:oref oref})))
+      (throw (ex-info "remove-in-parent! should only be called from items created via so/bind-children" {:oref oref})))
 
     (.log js/console "remove in parent" (get-in parent path))
     (update! parent update-in path remove-item-from-coll key)

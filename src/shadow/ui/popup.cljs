@@ -1,19 +1,19 @@
 (ns shadow.ui.popup
-  (:require [shadow.object :as obj]
+  (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
             [shadow.dom :as dom]))
 
-(obj/define-event :popup-closing "" [])
-(obj/define-event :popup-closed "" [])
-(obj/define-event :popup-open "" [])
+(so/define-event :popup-closing "" [])
+(so/define-event :popup-closed "" [])
+(so/define-event :popup-open "" [])
 
 (defn close [this]
-  (let [parent (obj/get-parent this)]
-    (obj/notify! parent :popup-closing)
-    (obj/destroy! this)
-    (obj/notify! parent :popup-closed)))
+  (let [parent (so/get-parent this)]
+    (so/notify! parent :popup-closing)
+    (so/destroy! this)
+    (so/notify! parent :popup-closed)))
 
-(obj/define ::popup-backdrop
+(so/define ::popup-backdrop
   :on []
   :dom (fn [this] [:div#backdrop])
   :dom-events [:click #(close (:parent %))]
@@ -23,18 +23,18 @@
 (defn create [parent popup-type obj]
   (when-not (map? obj)
     (throw (ex-info "popup/create requires map as third arg" {:obj obj})))
-  (obj/create popup-type (merge obj {:parent parent})))
+  (so/create popup-type (merge obj {:parent parent})))
 
 (defn show [popup]
   (let [;; make backdrop a child of the popup, so it gets destroyed when the popup is destroyed, neat eh?
-        backdrop (obj/create ::popup-backdrop {:parent popup})]
+        backdrop (so/create ::popup-backdrop {:parent popup})]
 
     (kb/push-focus backdrop)
     (kb/push-focus popup)
 
     (dom/append backdrop)
     (dom/append popup)
-    (obj/notify! popup :popup-open)
+    (so/notify! popup :popup-open)
     popup
     ))
 

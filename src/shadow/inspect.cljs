@@ -1,6 +1,6 @@
 (ns shadow.inspect
   (:require [shadow.dom :as dom]
-            [shadow.object :as obj]))
+            [shadow.object :as so]))
 
 (defprotocol Inspectable
   (-inspect [this]))

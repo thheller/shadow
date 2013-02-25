@@ -1,5 +1,5 @@
 (ns shadow.ui
-  (:require [shadow.object :as obj]
+  (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
             [shadow.dom :as dom]
             [goog.dom.forms :as gf]
@@ -23,7 +23,7 @@
 
     (add-watch oref watch-id (fn [_ _ _ new]
                                (when-let [value (get-in new attr)]
-                                 (let [node (obj/make-dom oref dom-key events-key value)]
+                                 (let [node (so/make-dom oref dom-key events-key value)]
                                    (dom/replace-node placeholder-node node))
                                  (remove-watch oref watch-id)
                                  )))
@@ -58,17 +58,17 @@
 
 ;;; INPUT
 
-(obj/define-event :input-change "when a validated input is changed"
+(so/define-event :input-change "when a validated input is changed"
   [[:attr "the attr arg"]
    [:value "the new value"]
    [:input "the dom input?"]])
 
-(obj/define-event :input-enter "when enter was pressed and the value validated"
+(so/define-event :input-enter "when enter was pressed and the value validated"
   [[:attr "attr"]
    [:value "value"]
    [:input "input"]])
 
-(obj/define-event :input-validated "whenever the input was validated"
+(so/define-event :input-validated "whenever the input was validated"
   [[:attr "attr"]
    [:valid "boolean"]
    [:sval "the string value entered"]
@@ -85,6 +85,20 @@
           idx
           (recur (rest items) (inc idx)))))))
 
+;; http://zilence.net/sj.gif
+(defn group-select-options
+  "transforms a list of maps into [[group-key [[value-key label] [value-key label]]] ...]"
+  [items group-key value-key label-fn]
+  (vec (->> items
+            (group-by group-key)
+            (sort-by first)
+            (map (fn [[group items]]
+                   [group (vec (map (fn [item]
+                                         [(get item value-key)
+                                          (label-fn item)])
+                                       items))])
+                 ))))
+
 (defn dom-select-grouped [obj attr type options-key select-attrs]
   (when-not (satisfies? IInputType type)
     (throw (ex-info "dom select type must support protocol InputType" {:type type})))
@@ -100,23 +114,38 @@
         _ (when-not (vector? options)
             (throw (ex-info "select options should be a vector" {:options options})))
 
-        select (dom/build [:select select-attrs
-                           (for [[group-label group-options] options]
-                             [:optgroup {:label group-label}
-                              (for [[value label] group-options]
-                                [:option {:value (-encode type value)
-                                          :selected (when (= init-val value) true)}
-                                 (str label)])])
-                           ])]
+        make-options (fn [options]
+                       ;; FIXME: this should probably do some recursive action
+                       ;; one may nest deeper than 1 lvl?
+                       (for [[group-label group-options] options]
+                         (if (string? group-options)
+                           ;; single option
+                           [:option {:value (-encode type group-label)} group-options]
+                           ;; optgroup
+                           [:optgroup {:label group-label}
+                            (for [[value label] group-options]
+                              [:option {:value (-encode type value)
+                                        :selected (when (= init-val value) true)}
+                               (str label)])])))
+
+        select (dom/build [:select select-attrs (make-options options)])]
+
+    (so/bind-change obj options-key
+                     (fn [_ new]
+                       (dom/reset select)
+                       (dom/append select [:option {:value "0"} "Select Changeset ..."])
+                       (doseq [option (make-options new)]
+                         (dom/append select option))
+                       ))
 
     (dom/on select :change
             (fn [ev]
               (let [sv (dom/get-value select)
                     {:keys [valid value error]} (-validate type sv)]
-                (obj/notify! obj :input-validated attr valid value error)
+                (so/notify! obj :input-validated attr valid value error)
                 (if valid
-                  (obj/notify! obj :input-change attr value select)
-                  (obj/log "dom-select-grouped with invalid value?" obj attr value select)
+                  (so/notify! obj :input-change attr value select)
+                  (so/log "dom-select-grouped with invalid value?" obj attr value select)
                   ))))
 
     select
@@ -138,10 +167,11 @@
         _ (when-not (vector? options)
             (throw (ex-info "select options should be a vector" {:options options})))
 
-        select (dom/build [:select select-attrs
-                           (for [[_ label] options]
-                             [:option (str label)])
-                           ])]
+        make-options (fn [options]
+                       (for [[_ label] options]
+                         [:option (str label)]))
+
+        select (dom/build [:select select-attrs (make-options options)])]
 
     (when-let [init-idx (index-of options #(= init-val (first %)))]
       (set! (.-selectedIndex select) init-idx))
@@ -150,7 +180,7 @@
             (fn [ev]
               (let [si (.-selectedIndex select)
                     sv (first (nth options si))]
-                (obj/notify! obj :input-change attr sv select))
+                (so/notify! obj :input-change attr sv select))
               ))
 
     select
@@ -178,13 +208,13 @@
         process-input (fn [notif]
                         (let [sval (dom/get-value input)
                               {:keys [valid error value]} (-validate type sval)]
-                          (obj/notify! obj :input-validated attr valid sval error)
+                          (so/notify! obj :input-validated attr valid sval error)
                           (when valid
-                            (obj/notify! obj notif attr value input)))
+                            (so/notify! obj notif attr value input)))
                         )]
 
     (when (:bind attrs)
-      (obj/bind-change obj path
+      (so/bind-change obj path
                        (fn [old new]
                          (dom/set-value input (-encode type new))
                          )))

@@ -1,5 +1,5 @@
 (ns shadow.debug
-  (:require [shadow.object :as obj]
+  (:require [shadow.object :as so]
             [shadow.ui.expandable :as expandable]
             [shadow.ui.popup :as popup]
             [shadow.keyboard :as kb]
@@ -11,10 +11,10 @@
 
 ;; public actions
 (defn list-objects [this]
-  (popup/open this ::debug-popup {:items (vals @obj/instances)}))
+  (popup/open this ::debug-popup {:items (vals @so/instances)}))
 
 ;; obj defs
-(obj/define ::item
+(so/define ::item
   :defaults {:show-details false}
 
   :dom (fn [this]
@@ -37,27 +37,27 @@
   :dom-events [[:click ".title"] expandable/toggle])
 
 
-(obj/define ::debug-popup
+(so/define ::debug-popup
   :dom (fn [this]
          [:div#debug-items.popup.fullscreen
           [:a.close {:href "#"} "close"]
-          [:h2 "Object Snapshot [Items #" (obj/bind this :items count) "]"]
+          [:h2 "Object Snapshot [Items #" (so/bind this :items count) "]"]
           [:p
            [:a.refresh {:href "#"} "refresh"]]
-          (obj/bind-children [:ul.items]
+          (so/bind-children [:ul.items]
                              this :items
                              ::item :item)])
 
   :dom-events [[:click "a.close"] popup/close
-               [:click "a.refresh"] #(obj/update! % assoc :items (vals @obj/instances))]
+               [:click "a.refresh"] #(so/update! % assoc :items (vals @so/instances))]
   )
 
-(obj/define ::debug-bar
+(so/define ::debug-bar
   :defaults {:object-count 0}
 
   :dom (fn [this]
          [:div#debug-bar
-          [:span.object-count "Object Count: #" (obj/bind this :object-count) " "]
+          [:span.object-count "Object Count: #" (so/bind this :object-count) " "]
           [:b "DEBUG "]
           [:button#debug-list.btn {:type "button"} "Show Object Snapshot"]])
 
@@ -66,11 +66,11 @@
   :dom-events [[:click "#debug-list"] list-objects])
 
 (defn ^:export activate! []
-  (let [bar (obj/create ::debug-bar {})]
+  (let [bar (so/create ::debug-bar {})]
     (reset! debug-bar bar)
 
-    (add-watch obj/instances 'obj-count-watch (fn [_ _ _ new]
-                                                (obj/update! bar assoc :object-count (count new))
+    (add-watch so/instances 'obj-count-watch (fn [_ _ _ new]
+                                                (so/update! bar assoc :object-count (count new))
                                                 ))
 
     (kb/push-focus bar)

@@ -219,7 +219,7 @@
 (defn reset
   "clear node children"
   [node]
-  (dom/removeChildren node))
+  (dom/removeChildren (-to-dom node)))
 
 (defn remove [node]
   (if (satisfies? ISeqable node)

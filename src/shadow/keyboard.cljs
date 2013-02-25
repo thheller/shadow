@@ -1,6 +1,6 @@
 (ns shadow.keyboard
   (:require [shadow.dom :as dom]
-            [shadow.object :as obj]))
+            [shadow.object :as so]))
 
 
 (def mod-keys #{16 ;;shift
@@ -74,7 +74,7 @@
 (defn handle-key-up [e]
   (let [key (.-keyCode e)]
     (when-not (or (contains? mod-keys key) (contains? ignore-key-events (.-nodeName (.-target e))))
-      (obj/log "keyboard/handle-key-up" e (.-nodeName (.-target e)))
+      (so/log "keyboard/handle-key-up" e (.-nodeName (.-target e)))
       (let [key-id (key-id-from-event e)]
         (loop [handlers @key-handlers]
           (if (empty? handlers)
@@ -83,7 +83,7 @@
                   handler (get keymap key-id)]
               (if handler
                 (do
-                  (obj/log "keyboard handler: " key-id e oref handler)
+                  (so/log "keyboard handler: " key-id e oref handler)
                   (handler oref))
                 (recur (rest handlers)))
               )))))))
@@ -104,7 +104,7 @@
   (swap! key-handlers (fn [x] (remove #(= oref (:oref %)) x))))
 
 (defn push-focus [oref]
-  (let [handlers (obj/get-type-attr oref :keyboard)]
+  (let [handlers (so/get-type-attr oref :keyboard)]
     (when (seq handlers)
       (let [keymap (reduce (fn [result [key-string handler-fn]]
                              (assoc result (parse-key-id key-string) handler-fn))
@@ -112,7 +112,7 @@
                            (partition 2 handlers))]
 
         (swap! key-handlers conj {:oref oref :keymap keymap})
-        (obj/add-reaction! oref :destroy #(remove-focus %))
+        (so/add-reaction! oref :destroy #(remove-focus %))
         ))
 
     ))

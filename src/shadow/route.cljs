@@ -2,16 +2,16 @@
   (:require [clojure.data :as data]
             [goog.events.EventTarget]
             [shadow.dom :as dom]
-            [shadow.object :as obj]
+            [shadow.object :as so]
             ))
 
 (def current-state (atom nil))
 
 (defn pop-current []
   (let [current @current-state
-        parent (obj/get-parent current)]
-    (obj/log "exit-route" current parent)
-    (obj/destroy! current)
+        parent (so/get-parent current)]
+    (so/log "exit-route" current parent)
+    (so/destroy! current)
     (reset! current-state parent)))
 
 (defn route-match? [parts tokens]
@@ -35,10 +35,10 @@
 
 (defn enter-route [route-type route-args]
   (let [current @current-state
-        child (obj/create route-type (assoc route-args :parent current))
-        parent-dom (obj/get-dom current)
+        child (so/create route-type (assoc route-args :parent current))
+        parent-dom (so/get-dom current)
         child-container (dom/query-one "#route-children" parent-dom)]
-    (obj/debug "enter-route" route-type route-args)
+    (so/debug "enter-route" route-type route-args)
     (when-not child-container
       (throw (str "route " (pr-str current) " does not have a #route-children in its dom, please add")))
 
@@ -47,7 +47,7 @@
 
 (defn push-routes [tokens]
   (let [current @current-state
-        child-routes (obj/get-type-attr current :routes)]
+        child-routes (so/get-type-attr current :routes)]
     (loop [routes (partition 2 child-routes)]
       (if (empty? routes)
         (throw (str "failed to route" (pr-str tokens)))
@@ -78,7 +78,7 @@
     (pop-current)
     (if (= base-path base-test)
       (do
-        (obj/log "will push now" @current-state)
+        (so/log "will push now" @current-state)
         (push-routes (drop base-length after)))
       (recur before after route-depth))))
 

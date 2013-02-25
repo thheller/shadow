@@ -99,25 +99,32 @@
     ))
 
 (defmacro wait [wait-let & body]
-  (let [results (reduce2 #(conj %1 [%2 (gensym)] %3) [] wait-let)
-        result-let (reduce2 (fn [result [_ key] value]
-                              (conj result key value))
-                            []
-                            results)
-        result-names (reduce2 (fn [result [_ key] _]
-                                (conj result key))
+  ;; if more than 1 result pair, combine and wait for all, otherwise just wait for the one
+  (if (= 2 (count wait-let))
+    (let [[value result] wait-let]
+      `(goog.result/waitOnSuccess ~result (fn [~value]
+                                            ~@body
+                                            )))
+    ;; this really needs a rewrite, first macro ever sure is ugly now
+    (let [results (reduce2 #(conj %1 [%2 (gensym)] %3) [] wait-let)
+          result-let (reduce2 (fn [result [_ key] value]
+                                (conj result key value))
                               []
                               results)
-        value-let (reduce2 (fn [result [orig alias] _]
-                             (conj result orig `(.getValue ~alias)))
-                           []
-                           results)]
-    `(let [~@result-let
-           combo# (goog.result/combine ~@result-names)]
-       (goog.result/waitOnSuccess
-         combo#
-         (fn [dummy#]
-           (let [~@value-let]
-             ~@body))))
-    ))
+          result-names (reduce2 (fn [result [_ key] _]
+                                  (conj result key))
+                                []
+                                results)
+          value-let (reduce2 (fn [result [orig alias] _]
+                               (conj result orig `(.getValue ~alias)))
+                             []
+                             results)]
+      `(let [~@result-let
+             combo# (goog.result/combine ~@result-names)]
+         (goog.result/waitOnSuccess
+          combo#
+          (fn [dummy#]
+            (let [~@value-let]
+              ~@body))))
+      )))
 

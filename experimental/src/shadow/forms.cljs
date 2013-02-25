@@ -1,7 +1,7 @@
 (ns shadow.forms
   (:use-macros [shadow.macros :only (wait)])
   (:require [shadow.dom :as dom]
-            [shadow.object :as obj]
+            [shadow.object :as so]
             [shadow.ui :as ui]
             [shadow.xhr :as xhr]
             ;; [cljs.reader :as reader]
@@ -53,7 +53,7 @@
 
 (defn validate-submit [form]
   (let [fields-to-validate (map :id (filter #(seq (:validations %)) (vals (get-in @form [:fields]))))]
-    (obj/log "validate on submit" fields-to-validate)
+    (so/log "validate on submit" fields-to-validate)
     (swap! form assoc :valid true)
     (doseq [field-id fields-to-validate]
       (do-validate form field-id false))
@@ -140,6 +140,6 @@
       (if-let [field (get-in fields field-id)]
         (let [control (:control field)]
           (display-errors field control messages))
-        (obj/log "state has error in field which is not in dom" field-id)
+        (so/log "state has error in field which is not in dom" field-id)
         )))
   form)
