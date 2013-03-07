@@ -101,6 +101,12 @@
   "called after the dom was created, use it to put it into the document"
   [[:dom "the dom that was created"]])
 
+(define-event :dom-entered
+  "should be called whenever a dom node is added to the document, since that
+   is not in control of this library its up to you to call this
+   use (so/notify-tree! your-obj :dom-entered) to notify the node and every child you created"
+  [])
+
 (define-event :updated
   "called after so/update! completed"
   [])
@@ -122,39 +128,6 @@
 (defn get-type-attr
   ([oref key] (get-in @object-defs [(-type oref) key]))
   ([oref key default] (get-in @object-defs [(-type oref) key] default)))
-
-
-(defn notify! [oref ev & args]
-  (when-not (contains? @events ev)
-    (debug "triggering undefined notifiction" (pr-str ev) " with " (pr-str args)))
-
-  (let [reactions-to-trigger (get-in oref [::reactions ev] (list))]
-    ;; (debug "notify!" (-id oref) (-type oref) ev reactions-to-trigger args)
-    (doseq [rfn reactions-to-trigger]
-      (apply rfn (cons oref args)))
-    ))
-
-(defn update! [oref update-fn & args]
-  (when-not (fn? update-fn)
-    (throw (str "update! expects a fn as second arg, not " (pr-str update-fn))))
-
-  (let [id (-id oref)
-        data (-data oref)
-        work-fn (fn [data] (apply update-fn data args))]
-    (-update oref work-fn)
-    (notify! oref :updated)
-    ))
-
-(defn update-direct! [oref update-fn & args]
-  (when-not (fn? update-fn)
-    (throw (str "update-direct! expects a fn as second arg, not " (pr-str update-fn))))
-
-  (let [id (-id oref)
-        data (-data oref)
-        work-fn (fn [data] (apply update-fn data args))]
-    (-update-direct oref work-fn)
-    (notify! oref :updated)
-    ))
 
 (defn ^:export get-dom [oref]
   (::dom oref))
@@ -186,6 +159,50 @@
   (let [type-kw (if (keyword? type) type (-type type))]
     (filter #(= type-kw (-type %)) (get-children oref))
     ))
+
+(defn notify! [oref ev & args]
+  (when-not (contains? @events ev)
+    (debug "triggering undefined notifiction" (pr-str ev) " with " (pr-str args)))
+
+  (let [reactions-to-trigger (get-in oref [::reactions ev] (list))]
+    ;; (debug "notify!" (-id oref) (-type oref) ev reactions-to-trigger args)
+    (doseq [rfn reactions-to-trigger]
+      (apply rfn (cons oref args)))
+    ))
+
+(defn visit-tree [root-obj visit-fn]
+  (visit-fn root-obj)
+  (doseq [child (get-children root-obj)]
+    (visit-tree child visit-fn)
+    ))
+
+(defn notify-tree! [oref ev & args]
+  (let [notify-fn (fn [obj]
+                    (apply notify! obj ev args))]
+    (visit-tree oref notify-fn)))
+
+(defn update! [oref update-fn & args]
+  (when-not (fn? update-fn)
+    (throw (str "update! expects a fn as second arg, not " (pr-str update-fn))))
+
+  (let [id (-id oref)
+        data (-data oref)
+        work-fn (fn [data] (apply update-fn data args))]
+    (-update oref work-fn)
+    (notify! oref :updated)
+    ))
+
+(defn update-direct! [oref update-fn & args]
+  (when-not (fn? update-fn)
+    (throw (str "update-direct! expects a fn as second arg, not " (pr-str update-fn))))
+
+  (let [id (-id oref)
+        data (-data oref)
+        work-fn (fn [data] (apply update-fn data args))]
+    (-update-direct oref work-fn)
+    (notify! oref :updated)
+    ))
+
 
 (defn- set-parent! [child parent]
   (let [child-id (-id child)

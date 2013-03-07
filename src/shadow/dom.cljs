@@ -19,6 +19,9 @@
 (defn remove-class [el cls]
   (gcls/remove (-to-dom el) cls))
 
+(defn toggle-class [el cls]
+  (gcls/toggle (-to-dom el) cls))
+
 (declare build)
 
 (defn- merge-class-string [current extra-class]
@@ -151,20 +154,6 @@
 
   )
 
-(comment ;; IE cannot dispatch protocols on "native" types apparently
-  (defn nodelist->vector [nl]
-    (js* "function(x) { var y = []; for (i = 0; i < x.length; i++) { y.push(x[i]); }; return cljs.core.PersistentVector.fromArray(y); }(~{nl});"))
-
-  (when (js* "(typeof NodeList != 'undefined')")
-    (extend-protocol clojure.core/ISeqable
-      js/NodeList
-      (-seq [this] (seq (nodelist->vector this)))))
-
-  (when (js* "(typeof HTMLCollection != 'undefined')")
-    (extend-protocol clojure.core/ISeqable
-      js/HTMLCollection
-      (-seq [this] (seq (nodelist->vector this))))))
-
 
 (defn query-one
   ([sel] (.querySelector js/document sel))
@@ -270,6 +259,9 @@
                 (fn set-data-set-attribute [el key value]
                   (.setAttribute (-to-dom el) (str "data-" (name key)) (str value)))
                 ))
+
+(defn set-html [node text]
+  (set! (.-innerHTML (-to-dom node)) text))
 
 (defn ancestor-by-class [el cls]
   (dom/getAncestorByClass (-to-dom el) cls))

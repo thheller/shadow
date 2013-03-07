@@ -57,13 +57,11 @@
 
   :dom (fn [this]
          [:div#debug-bar
-          [:span.object-count "Object Count: #" (so/bind-simple this :object-count) " "]
-          [:b "DEBUG "]
-          [:button#debug-list.btn {:type "button"} "Show Object Snapshot"]])
+          [:div.object-count "Object Count: #" (so/bind-simple this :object-count) " "]])
 
   :keyboard ["shift-escape" #(list-objects %)]
 
-  :dom-events [[:click "#debug-list"] list-objects])
+  :dom-events [])
 
 (defn ^:export activate! []
   (let [bar (so/create ::debug-bar {})]
