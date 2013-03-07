@@ -5,6 +5,9 @@
             [shadow.object :as so]
             ))
 
+
+;; FIXME: rewrite this, its clearly broken in some places
+
 (def current-state (atom nil))
 
 (defn pop-current []
@@ -37,7 +40,7 @@
   (let [current @current-state
         child (so/create route-type (assoc route-args :parent current))
         parent-dom (so/get-dom current)
-        child-container (dom/query-one "#route-children" parent-dom)]
+        child-container (dom/query-one ".route-children" parent-dom)]
     (so/debug "enter-route" route-type route-args)
     (when-not child-container
       (throw (str "route " (pr-str current) " does not have a #route-children in its dom, please add")))
@@ -46,21 +49,22 @@
     (reset! current-state child)))
 
 (defn push-routes [tokens]
-  (let [current @current-state
-        child-routes (so/get-type-attr current :routes)]
-    (loop [routes (partition 2 child-routes)]
-      (if (empty? routes)
-        (throw (str "failed to route" (pr-str tokens)))
+  (when (seq tokens)
+    (let [current @current-state
+          child-routes (so/get-type-attr current :routes)]
+      (loop [routes (partition 2 child-routes)]
+        (if (empty? routes)
+          (throw (str "failed to route" (pr-str tokens)))
 
-        (let [[route-parts route-type] (first routes)
-              route-parts (if (vector? route-parts) route-parts [route-parts])]
-          (if-let [[route-args remaining] (route-match? route-parts tokens)]
-            (do
-              (enter-route route-type route-args)
-              (when (seq remaining)
-                (push-routes remaining)))
-            (recur (rest routes))
-            ))))))
+          (let [[route-parts route-type] (first routes)
+                route-parts (if (vector? route-parts) route-parts [route-parts])]
+            (if-let [[route-args remaining] (route-match? route-parts tokens)]
+              (do
+                (enter-route route-type route-args)
+                (when (seq remaining)
+                  (push-routes remaining)))
+              (recur (rest routes))
+              )))))))
 
 (defn current-path []
   (-> js/document

@@ -41,7 +41,7 @@
   :dom (fn [this]
          [:div#debug-items.popup.fullscreen
           [:a.close {:href "#"} "close"]
-          [:h2 "Object Snapshot [Items #" (so/bind this :items count) "]"]
+          [:h2 "Object Snapshot [Items #" (so/bind-simple this :items count) "]"]
           [:p
            [:a.refresh {:href "#"} "refresh"]]
           (so/bind-children [:ul.items]
@@ -57,7 +57,7 @@
 
   :dom (fn [this]
          [:div#debug-bar
-          [:span.object-count "Object Count: #" (so/bind this :object-count) " "]
+          [:span.object-count "Object Count: #" (so/bind-simple this :object-count) " "]
           [:b "DEBUG "]
           [:button#debug-list.btn {:type "button"} "Show Object Snapshot"]])
 

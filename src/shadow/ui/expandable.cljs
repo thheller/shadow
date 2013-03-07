@@ -52,7 +52,9 @@
     (when-not dom-fn
       (throw (str "object:" (so/-type oref) " did not define :expandable-dom cant use expandable/node without")))
 
-    (so/bind oref state-attr
+    ;; FIXME: this does not cleanup properly
+    ;; should use bind with a custom object
+    (so/bind-simple oref state-attr
               (fn [v]
                 (if v
                   (so/make-dom oref :expandable-dom :expandable-events)

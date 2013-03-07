@@ -36,6 +36,18 @@
 
 (def error log)
 
+(def default-ex-info js/cljs.core.ex-info)
+
+(set! (.. js/cljs -core -ex-info)
+      (fn shadow-ex-info
+        ([msg map]
+           (log "EX-INFO:" msg map)
+           (default-ex-info msg map))
+        ([msg map cause]
+           (log "EX-INFO:" msg map cause)
+           (default-ex-info msg map cause))
+        ))
+
 (def obj-id (atom 0))
 (defn next-id []
   (swap! obj-id inc))
@@ -404,10 +416,12 @@
                    (when-not (= ov nv)
                      (callback ov nv)))))))
 
-(defn bind
+(defn bind-simple
   "[oref attr node-gen] produces a node via (node-gen new-value)
-   watches obj for changes and replaces the generated node on change (node-gen defaults to str)"
-  ([oref attr] (bind oref attr str))
+   watches obj for changes and replaces the generated node on change (node-gen defaults to str)
+
+  only use if the node has no attached behavior like clicks, use bind with an extra object for those"
+  ([oref attr] (bind-simple oref attr str))
   ([oref attr node-gen]
      (let [attr (if (vector? attr) attr [attr])
            node-get #(dom/build (node-gen %))
@@ -424,11 +438,38 @@
        @node)
      ))
 
+(defn bind
+  "bind the given attribute a child item
+  the item will be recreated whenever the value changes (old one will be destroyed)"
+  ([oref attr item-type item-key item-attrs]
+     (let [attr (if (vector? attr) attr [attr])
+           curval (get-in oref attr)
+
+           make-child-fn (fn [value]
+                           (create item-type (merge
+                                              item-attrs
+                                              {:parent oref
+                                               item-key value})))
+
+           child (atom (make-child-fn curval))]
+
+       (bind-change oref attr
+                    (fn [old new]
+                      (let [new-child (make-child-fn new)
+                            current-node @child]
+
+                        (dom/replace-node current-node new-child)
+                        (destroy! @child)
+                        (reset! child new-child))))
+
+       @child)
+     ))
+
 (defn coll-destroy-children [children c diff]
   ;; whats more efficient in the DOM, drop head or tail?
   ;; diff is neg!
   (doseq [obj (subvec children (+ c diff) c)]
-    (destroy! obj))
+    (destroy! (get-from-dom obj)))
   (subvec children 0 (+ c diff)))
 
 (defn bind-children

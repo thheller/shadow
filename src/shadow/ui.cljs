@@ -132,10 +132,12 @@
 
     (so/bind-change obj options-key
                      (fn [_ new]
-                       (dom/reset select)
-                       (dom/append select [:option {:value "0"} "Select Changeset ..."])
-                       (doseq [option (make-options new)]
-                         (dom/append select option))
+                       (let [curval (get-in obj path)]
+                         (so/log "options changed" curval new)
+                         (dom/reset select)
+                         (doseq [option (make-options new)]
+                           (dom/append select option))
+                         (dom/set-value select (-encode type curval)))
                        ))
 
     (dom/on select :change
