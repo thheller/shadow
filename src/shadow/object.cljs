@@ -327,8 +327,8 @@
   (let [defaults (get-in @object-defs [type :defaults])]
     (cond
      (nil? defaults) data
-     (map? defaults) (merge data defaults)
-     (fn? defaults) (merge data (defaults))
+     (map? defaults) (merge defaults data)
+     (fn? defaults) (merge (defaults) data)
      :else (throw (ex-info "invalid object defaults" {:defaults defaults :type type}))
      )))
 

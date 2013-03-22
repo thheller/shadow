@@ -90,7 +90,8 @@
       (let [children (build child-struct)]
         (if (seq? children)
           (doseq [child children]
-            (dom/append node child))
+            (when child
+              (dom/append node child)))
           (do
             (dom/append node children)))))
     node))
@@ -122,6 +123,9 @@
   LazySeq
   (-to-dom [this]
     (map -to-dom this))
+
+  nil
+  (-to-dom [_] nil)
   )
 
 (defn build [struct]
