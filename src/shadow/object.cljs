@@ -148,6 +148,13 @@
     (get @instances parent-id)
     ))
 
+(defn ^:export get-parent-of-type [oref parent-type]
+  (loop [parent (:parent oref)]
+    (when parent
+      (if (= (-type parent) parent-type)
+        parent
+        (recur (:parent parent))))))
+
 (defn ^:export get-children [parent]
   (let [parent-id (-id parent)
         child-ids (get @instance-children parent-id [])
@@ -158,6 +165,11 @@
 (defn get-children-of-type [oref type]
   (let [type-kw (if (keyword? type) type (-type type))]
     (filter #(= type-kw (-type %)) (get-children oref))
+    ))
+
+(defn get-collection-item [oref]
+  (let [item-key (::coll-item-key oref)]
+    (get oref item-key)
     ))
 
 (defn notify! [oref ev & args]
@@ -290,7 +302,7 @@
   (when-not (even? (count behavior))
     (throw (ex-info "invalid behavior" {:behavior behavior})))
 
-  (reduce reaction-merge result (partition 2 behavior)))
+  (reduce reaction-merge result (reverse (partition 2 behavior))))
 
 (defn define [id & args]
   (when-not (even? (count args))
@@ -301,7 +313,7 @@
   (let [odef (apply hash-map args)
 
         reactions (merge-reactions {} (:on odef []))
-        reactions (merge-reactions reactions (:behaviors odef []))
+        reactions (reduce merge-reactions reactions (:behaviors odef []))
 
         odef (assoc odef
                ::id id
@@ -419,7 +431,8 @@
   ([oref ev handler-fn]
      (add-reaction! oref [ev handler-fn]))
   ([oref list]
-     (update! oref update-in [::reactions] merge-reactions list)))
+     (update! oref update-in [::reactions] merge-reactions list)
+     ))
 
 (defn bind-change [oref attr callback]
   (when-not (satisfies? IObject oref)
@@ -551,6 +564,7 @@
                             ;; only update when something changes
                             (when-not (and (= ckey nkey) (= cval nval))
                               (update! cc assoc item-key nval ::coll-key nkey)
+                              (notify! cc :bind-child-update ckey nkey cval nval)
                               )))
 
                         ;; enter new
@@ -564,10 +578,11 @@
        coll-dom)))
 
 (defn remove-from-vector [coll key]
+  (log "remove-from-vector" key coll)
   (let [c (count coll)]
     (cond
-     (= 0 key) (subvec coll 1)
-     (= (dec c) key) (subvec coll 0 (dec c))
+     (= 0 key) (vec (rest coll))
+     (= (dec c) key) (vec (butlast coll)) 
      :else ;; item in teh middle
      (vec (concat (subvec coll 0 key)
                   (subvec coll (inc key) c))))
@@ -584,7 +599,6 @@
    :else (throw "unknown coll type")
    ))
 
-
 (defn remove-in-parent! [oref]
   (let [parent (get-parent oref)
         key (::coll-key oref)
@@ -593,7 +607,7 @@
     (when-not (and key path)
       (throw (ex-info "remove-in-parent! should only be called from items created via so/bind-children" {:oref oref})))
 
-    (.log js/console "remove in parent" (get-in parent path))
+    (log "remove in parent" key path parent)
     (update! parent update-in path remove-item-from-coll key)
     ))
 

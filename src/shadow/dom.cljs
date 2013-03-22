@@ -283,9 +283,14 @@
   (let [pos (gs/getPosition (-to-dom el))]
     {:x (.-x pos) :y (.-y pos)}))
 
+(defrecord Size [w h])
+(defn size->clj [size]
+  (Size. (.-width size) (.-height size)))
+
 (defn get-size [el]
-  (let [size (gs/getSize (-to-dom el))]
-    {:w  (.-width size) :h (.-height size)}
-    ))
+  (size->clj (gs/getSize (-to-dom el))))
+
+(defn get-viewport-size []
+  (size->clj (dom/getViewportSize)))
 
 

@@ -20,6 +20,22 @@
 
   :keyboard ["escape" #(close (:parent %))])
 
+(defn do-center-on-screen [popup]
+  (let [{vw :w vh :h} (dom/get-viewport-size)
+        {sw :w sh :h} (dom/get-size popup)
+        mx (int (/ (- vw sw) 2))
+        my (int (/ (- vh sh) 2))]
+    (dom/set-style popup {:top (str my "px")
+                          :left (str mx "px")})))
+
+;; behavior yes/no?
+;;
+;; :on [:popup-open popup/center-on-screen]
+;; vs
+;; :behaviors [popup/center-on-screen]
+(def ^{:doc "behavior"} center-on-screen
+  [:popup-open do-center-on-screen])
+
 (defn create [parent popup-type obj]
   (when-not (map? obj)
     (throw (ex-info "popup/create requires map as third arg" {:obj obj})))
