@@ -7,6 +7,8 @@
             [cljs.reader :as reader]
             ))
 
+(defn as-path [k]
+  (if (keyword? k) [k] k))
 
 (defprotocol IInputType
   (-dom-type [this])
@@ -52,7 +54,7 @@
   (reify IInputType
     (-dom-type [this] "text")
     (-validate [this string]
-      {:valid true :value (keyword string)})
+      {:valid true :value (keyword (.substring string 1))})
     (-encode [this val]
       (str val))))
 
@@ -107,8 +109,8 @@
   ;; options should be [["group label" [[value "label"]
   ;;                                    [value "label"]]]
 
-  (let [path (if (vector? attr) attr [attr])
-        init-val (get-in obj path)
+  (let [attr (as-path attr)
+        init-val (get-in obj attr)
         options (get obj options-key)
 
         _ (when-not (vector? options)
@@ -132,7 +134,7 @@
 
     (so/bind-change obj options-key
                      (fn [_ new]
-                       (let [curval (get-in obj path)]
+                       (let [curval (get-in obj attr)]
                          (so/log "options changed" curval new)
                          (dom/reset select)
                          (doseq [option (make-options new)]
@@ -146,7 +148,7 @@
                     {:keys [valid value error]} (-validate type sv)]
                 (so/notify! obj :input-validated attr valid value error)
                 (if valid
-                  (so/notify! obj :input-change attr value select)
+                  (so/update! obj assoc-in attr value)
                   (so/log "dom-select-grouped with invalid value?" obj attr value select)
                   ))))
 
@@ -160,8 +162,8 @@
   ;; options-key should point to options in obj (I may want to bind to them!)
   ;; options should be [[value "label"] [value "label"]
 
-  (let [path (if (vector? attr) attr [attr])
-        init-val (get-in obj path)
+  (let [attr (as-path attr)
+        init-val (get-in obj attr)
         multiple (:multiple select-attrs)
 
         options (get obj options-key)
@@ -170,8 +172,8 @@
             (throw (ex-info "select options should be a vector" {:options options})))
 
         make-options (fn [options]
-                       (for [[_ label] options]
-                         [:option (str label)]))
+                       (for [[value label] options]
+                         [:option {:value (-encode type value)} (str label)]))
 
         select (dom/build [:select select-attrs (make-options options)])]
 
@@ -180,9 +182,12 @@
 
     (dom/on select :change
             (fn [ev]
-              (let [si (.-selectedIndex select)
-                    sv (first (nth options si))]
-                (so/notify! obj :input-change attr sv select))
+              (let [sval (dom/get-value select)
+                    {:keys [valid value error] :as result} (-validate type sval)]
+                (if valid
+                  (so/update! obj assoc-in attr value)
+                  (so/log "dom-select with invalid value?" obj attr sval value select result)
+                  ))
               ))
 
     select
@@ -194,9 +199,9 @@
   (when-not (satisfies? IInputType type)
     (throw (ex-info "dom input type must support protocol InputType" {:type type})))
 
-  (let [path (if (vector? attr) attr [attr])
+  (let [attr (as-path attr)
         capture (:capture attrs #{:change})
-        init-val (get-in obj path)
+        init-val (get-in obj attr)
         init-sval (:value attrs)
         init-sval (if (nil? init-val)
                     ""
@@ -207,16 +212,16 @@
                                      (assoc :value init-sval
                                             :type (-dom-type type)))])
 
-        process-input (fn [notif]
+        process-input (fn [e]
                         (let [sval (dom/get-value input)
                               {:keys [valid error value]} (-validate type sval)]
                           (so/notify! obj :input-validated attr valid sval error)
                           (when valid
-                            (so/notify! obj notif attr value input)))
+                            (so/update! obj assoc-in attr value)))
                         )]
 
     (when (:bind attrs)
-      (so/bind-change obj path
+      (so/bind-change obj attr
                        (fn [old new]
                          (dom/set-value input (-encode type new))
                          )))
@@ -226,11 +231,30 @@
               (fn [ev]
                 (when (= 13 (.-keyCode ev))
                   (dom/ev-stop ev)
-                  (process-input :input-enter)
+                  (process-input ev)
                   ))))
 
     (when (contains? capture :change)
-      (dom/on input :change #(process-input :input-change)))
+      (dom/on input :change process-input))
+
+    input
+    ))
+
+(defn dom-checkbox [obj attr attrs]
+  (let [attr (as-path attr)
+        init-checked (get-in obj attr)
+        input (dom/build [:input (assoc attrs :type "checkbox")])]
+
+    (dom/check input init-checked)
+
+    (when (:bind attrs)
+      (so/bind-change obj attr
+                       (fn [old new]
+                         (dom/check input new)
+                         )))
+
+    (dom/on input :change (fn [e]
+                            (so/update! obj assoc-in attr (dom/checked? input))))
 
     input
     ))
@@ -240,8 +264,8 @@
   (when-not (satisfies? IInputType type)
     (throw (ex-info "dom input type must support protocol InputType" {:type type :attr attr :attrs attrs})))
 
-  (let [path (if (vector? attr) attr [attr])
-        init-val (get-in obj path)
+  (let [attr (as-path attr)
+        init-val (get-in obj attr)
         init-sval (:value attrs)
         init-sval (if (nil? init-val)
                     ""
@@ -250,7 +274,7 @@
         input (dom/build [:textarea (dissoc attrs :bind) init-sval])]
 
     (when (:bind attrs)
-      (so/bind-change obj path
+      (so/bind-change obj attr
                        (fn [old new]
                          (dom/set-value input (-encode type new))
                          )))
@@ -260,7 +284,7 @@
                                   {:keys [valid error value]} (-validate type sval)]
                               (so/notify! obj :input-validated attr valid sval error)
                               (when valid
-                                (so/notify! obj :input-change attr value input)))
+                                (so/update! obj assoc-in attr value)))
                             ))
 
     input
