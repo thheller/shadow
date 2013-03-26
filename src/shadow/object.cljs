@@ -247,13 +247,16 @@
        (doseq [child (get-children oref)]
          (destroy! child :parent))
 
-       (notify! oref :destroy cause)
        (dom-destroy oref cause)
+       (notify! oref :destroy cause)
 
        (swap! instances dissoc obj-id)
        (swap! instance-parent dissoc obj-id)
        (when parent-id
-         (swap! instance-children update-in [parent-id] disj obj-id)))))
+         (swap! instance-children update-in [parent-id] disj obj-id)))
+
+     (log "done destroy" oref)
+     ))
 
 (comment
   "should I create basically instance methods? doesnt really seam that useful"
@@ -274,10 +277,11 @@
 
     (let [handler (if (keyword? handler)
                     (fn [this e]
-                      (dom/ev-stop e)
                       (notify! this handler e))
                     handler)]
-      (dom/on dom ev (fn dom-event-handler [e] (handler oref e))))))
+      (dom/on dom ev (fn dom-event-handler [e]
+                       (dom/ev-stop e)
+                       (handler oref e))))))
 
 (defn dom-init [this]
   (when-let [dom-fn (get-type-attr this :dom)]
@@ -344,6 +348,11 @@
         )))
 
 
+(defn alive? [obj]
+  (contains? @instances (-id obj)))
+
+(defrecord Watch [key handler])
+
 (deftype ObjectRef [id type ^:mutable data ^:mutable watches]
   IObject
   (-id [this] id)
@@ -353,8 +362,13 @@
     (let [old data
           new (update-fn data)]
       (set! data new)
-      (doseq [[key watch-fn] watches]
-        (watch-fn key this old new))))
+      (doseq [{:keys [key handler] :as watch} watches]
+        ;; watches may destroy the current object
+        ;; if that happens we should not continue
+        ;; FIXME: this seems really dirty, there must be a cleaner way?
+        ;; maybe queue all other modifications until this is finished?
+        (when (alive? this)
+          (handler key this old new)))))
 
   (-update-direct [this update-fn]
     (set! data (update-fn data)))
@@ -375,9 +389,9 @@
   (-notify-watches [this oldval newval]
     (throw (js/Error. "who be calling?")))
   (-add-watch [this key f]
-    (set! watches (assoc watches key f)))
+    (set! watches (conj watches (Watch. key f))))
   (-remove-watch [this key]
-    (set! watches (dissoc watches key)))
+    (set! watches (remove #(= key (:key %)) watches)))
 
   ILookup
   (-lookup [this k]
@@ -397,6 +411,26 @@
   (-to-dom [this] (::dom data))
   )
 
+(defn add-reaction!
+  ([oref ev handler-fn]
+     (add-reaction! oref [ev handler-fn]))
+  ([oref list]
+     (update! oref update-in [::reactions] merge-reactions list)
+     ))
+
+(defn bind-change [oref attr callback]
+  (when-not (satisfies? IObject oref)
+    (throw (ex-info "binding currently only supports shadow objects, other atoms might leak, may add later" {:oref oref :attr attr})))
+
+  (let [attr (if (vector? attr) attr [attr])
+        watch-key (gensym "bind-change")]
+    (add-watch oref watch-key
+               (fn bind-change-watch [_ _ old new]
+                 (let [ov (get-in old attr)
+                       nv (get-in new attr)]
+                   (when-not (= ov nv)
+                     (callback ov nv)))))))
+
 (defn create [type obj]
   (when-not (contains? @object-defs type)
     (throw (ex-info (str "cannot create unknown child type: " type) {:type type :obj obj})))
@@ -406,13 +440,15 @@
   (let [oid (next-id)
         parent (:parent obj)
 
+        odef (get @object-defs type)
+
         obj (-> obj
                 (assoc ::object-id oid
-                       ::reactions (get-in @object-defs [type ::reactions] {}))
+                       ::reactions (get odef ::reactions {}))
                 (merge-defaults type)
                 (dissoc :parent))
 
-        oref (ObjectRef. oid type obj {})]
+        oref (ObjectRef. oid type obj [])]
 
     ;; dont use oref before this
     (swap! instances assoc oid oref)
@@ -425,26 +461,12 @@
     (when-let [dom (dom-init oref)]
       (notify! oref :dom-init dom))
 
+    (when-let [watches (:watch odef)]
+      (doseq [[attr handler] (partition 2 watches)]
+        (bind-change oref attr (fn [old new]
+                                 (handler oref old new)))))
+
     oref))
-
-(defn add-reaction!
-  ([oref ev handler-fn]
-     (add-reaction! oref [ev handler-fn]))
-  ([oref list]
-     (update! oref update-in [::reactions] merge-reactions list)
-     ))
-
-(defn bind-change [oref attr callback]
-  (when-not (satisfies? IObject oref)
-    (throw (ex-info "binding currently only supports shadow objects, other atoms might leak, may add later" {:oref oref :attr attr})))
-
-  (let [attr (if (vector? attr) attr [attr])]
-    (add-watch oref (gensym "bind-change")
-               (fn bind-change-watch [_ _ old new]
-                 (let [ov (get-in old attr)
-                       nv (get-in new attr)]
-                   (when-not (= ov nv)
-                     (callback ov nv)))))))
 
 (defn bind-simple
   "[oref attr node-gen] produces a node via (node-gen new-value)
@@ -499,46 +521,48 @@
   ;; whats more efficient in the DOM, drop head or tail?
   ;; diff is neg!
   (doseq [obj (subvec children (+ c diff) c)]
-    (destroy! (get-from-dom obj)))
+    (let [obj (get-from-dom obj)]
+      (destroy! obj)))
+
   (subvec children 0 (+ c diff)))
 
 (defn bind-children
-  ([node oref attr item-type item-key]
-     (bind-children node oref attr item-type item-key #(map-indexed vector %)))
-  ([node oref attr item-type item-key coll-transform]
+  ([node parent attr item-type item-key]
+     (bind-children node parent attr item-type item-key #(map-indexed vector %)))
+  ([node parent attr item-type item-key coll-transform]
      (let [attr (if (vector? attr) attr [attr])
 
            coll-dom (dom/build node)
 
            make-item-fn (fn [[key val]]
-                          (let [obj (create item-type {:parent oref
+                          (let [obj (create item-type {:parent parent
                                                        ::coll-path attr
                                                        ::coll-key key
                                                        ::coll-item-key item-key
                                                        item-key val})]
 
                             (bind-change obj item-key
-                                         (fn [_ new]
+                                         (fn [old new]
                                            ;; FIXME: this wont work for sets, only vec and map
 
                                            ;; this is also called when the parent coll is updated
                                            ;; kinda doing double work
                                            (let [parent-key (conj attr (::coll-key obj))
-                                                 coll-val (get-in oref parent-key)]
+                                                 coll-val (get-in parent parent-key)]
                                              ;; only update when its not current, aka child updated itself
                                              (when-not (= coll-val new)
-                                               (log "direct child update" key parent-key new coll-val)
-                                               (update! oref assoc-in parent-key new)
+                                               (log "direct child update" parent obj key parent-key new coll-val)
+                                               (update! parent assoc-in parent-key new)
                                                ))))
                             obj
                             ))
 
            ]
 
-       (doseq [item (coll-transform (get-in oref attr))]
+       (doseq [item (coll-transform (get-in parent attr))]
          (dom/append coll-dom (make-item-fn item)))
 
-       (bind-change oref attr
+       (bind-change parent attr
                     (fn bind-children-watch [old new]
                       (let [children (dom/children coll-dom)
                             new-coll (vec (coll-transform new))
@@ -551,7 +575,6 @@
                                        (coll-destroy-children children count-children diff)
                                        children)
                             count-children (min count-new count-children)]
-
 
                         ;; update current
                         (dotimes [idx count-children]
@@ -572,7 +595,7 @@
                           (doseq [item (subvec new-coll count-children count-new)]
                             (dom/append coll-dom (make-item-fn item))))
 
-                        (notify! oref :bind-children-update)
+                        (notify! parent :bind-children-update)
                         )))
 
        coll-dom)))
@@ -607,8 +630,9 @@
     (when-not (and key path)
       (throw (ex-info "remove-in-parent! should only be called from items created via so/bind-children" {:oref oref})))
 
-    (log "remove in parent" key path parent)
+    (log "remove in parent" key path parent (get-in parent path))
     (update! parent update-in path remove-item-from-coll key)
+    (log "after remove in parent" key path (get-in parent path))
     ))
 
 (defn inspect! [oref]
