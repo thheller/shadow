@@ -111,7 +111,8 @@
 
     (reset! current-state root-state)
 
-    (dom/on (dom/-to-dom root-state) :click intercept-clicks-on-a)
+    (when (.. js/window -history -pushState) 
+      (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a))
 
     (push-routes path-tokens)
     ))

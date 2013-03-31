@@ -68,9 +68,6 @@
   List
   (-inspect [this] (do-inspect-seq this))
 
-  js/HTMLElement
-  (-inspect [this] [:span.inspect-dom (str this)])
-
   PersistentHashSet
   (-inspect [this] [:ul.inspect-set
                     (for [v this]

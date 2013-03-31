@@ -255,7 +255,6 @@
        (when parent-id
          (swap! instance-children update-in [parent-id] disj obj-id)))
 
-     (log "done destroy" oref)
      ))
 
 (comment
@@ -418,18 +417,20 @@
      (update! oref update-in [::reactions] merge-reactions list)
      ))
 
-(defn bind-change [oref attr callback]
-  (when-not (satisfies? IObject oref)
-    (throw (ex-info "binding currently only supports shadow objects, other atoms might leak, may add later" {:oref oref :attr attr})))
+(defn bind-change
+  ([oref attr callback]
+     (bind-change oref attr callback (gensym "bind-change")))
+  ([oref attr callback watch-key]
+     (when-not (satisfies? IObject oref)
+       (throw (ex-info "binding currently only supports shadow objects, other atoms might leak, may add later" {:oref oref :attr attr})))
 
-  (let [attr (if (vector? attr) attr [attr])
-        watch-key (gensym "bind-change")]
-    (add-watch oref watch-key
-               (fn bind-change-watch [_ _ old new]
-                 (let [ov (get-in old attr)
-                       nv (get-in new attr)]
-                   (when-not (= ov nv)
-                     (callback ov nv)))))))
+     (let [attr (if (vector? attr) attr [attr])]
+       (add-watch oref watch-key
+                  (fn bind-change-watch [_ _ old new]
+                    (let [ov (get-in old attr)
+                          nv (get-in new attr)]
+                      (when-not (= ov nv)
+                        (callback ov nv))))))))
 
 (defn create [type obj]
   (when-not (contains? @object-defs type)
@@ -564,7 +565,7 @@
 
        (bind-change parent attr
                     (fn bind-children-watch [old new]
-                      (let [children (dom/children coll-dom)
+                      (let [children (into [] (dom/children coll-dom))
                             new-coll (vec (coll-transform new))
                             count-children (count children)
                             count-new (count new)

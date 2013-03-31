@@ -9,20 +9,34 @@
 (defprotocol IElement
   (-to-dom [this]))
 
+(def dom-node (if (js* "((typeof HTMLElement) != 'undefined')")
+                -to-dom
+                (fn dom-node-ie [el]
+                  (if (satisfies? IElement el)
+                    (-to-dom el)
+                    el))
+                ))
+
+(def build dom-node)
+
 (defn ev-stop [e]
-  (.stopPropagation e)
-  (.preventDefault e))
+  (if (.-stopPropagation e)
+    (do
+      (.stopPropagation e)
+      (.preventDefault e))
+    (do
+      (set! (.-cancelBubble e) true)
+      (set! (.-returnValue e) false)))
+  true)
 
 (defn add-class [el cls]
-  (gcls/add (-to-dom el) cls))
+  (gcls/add (dom-node el) cls))
 
 (defn remove-class [el cls]
-  (gcls/remove (-to-dom el) cls))
+  (gcls/remove (dom-node el) cls))
 
 (defn toggle-class [el cls]
-  (gcls/toggle (-to-dom el) cls))
-
-(declare build)
+  (gcls/toggle (dom-node el) cls))
 
 (defn- merge-class-string [current extra-class]
   (if (seq current)
@@ -87,7 +101,7 @@
   (let [[node node-children] (destructure-node structure)]
 
     (doseq [child-struct node-children]
-      (let [children (build child-struct)]
+      (let [children (dom-node child-struct)]
         (if (seq? children)
           (doseq [child children]
             (when child
@@ -95,9 +109,6 @@
           (do
             (dom/append node children)))))
     node))
-
-(defn build-seq [s]
-  (map build s))
 
 (extend-protocol IElement
   string
@@ -110,12 +121,6 @@
   (-to-dom [this]
     (.createTextNode js/document (str this)))
 
-  js/Text
-  (-to-dom [this] this)
-
-  js/HTMLElement
-  (-to-dom [this] this)
-
   PersistentVector
   (-to-dom [this]
     (make-dom-node this))
@@ -124,17 +129,23 @@
   (-to-dom [this]
     (map -to-dom this))
 
+  js/Text
+  (-to-dom [this] this)
+
   nil
   (-to-dom [_] nil)
   )
 
-(defn build [struct]
-  (let [dom (-to-dom struct)]
-    dom))
+(when (js* "((typeof HTMLElement) != 'undefined')")
+  (extend-protocol IElement
+    js/HTMLElement
+    (-to-dom [this] this)
+    ))
+
 
 (defn append
-  ([node] (dom/append (.-body js/document) (-to-dom node)))
-  ([el node] (dom/append (-to-dom el) (-to-dom node))))
+  ([node] (dom/append (.-body js/document) (dom-node node)))
+  ([el node] (dom/append (dom-node el) (dom-node node))))
 
 (defn- lazy-native-coll-seq [coll idx]
   (when (< idx (.-length coll))
@@ -161,22 +172,26 @@
 
 (defn query-one
   ([sel] (.querySelector js/document sel))
-  ([sel root] (.querySelector (-to-dom root) sel)))
+  ([sel root] (.querySelector (dom-node root) sel)))
 
 (defn query
   ([sel] (NativeColl. (.querySelectorAll js/document sel)))
-  ([sel root] (NativeColl. (.querySelectorAll (-to-dom root) sel))))
+  ([sel root] (NativeColl. (.querySelectorAll (dom-node root) sel))))
 
-(defn- dom-listen [el ev handler]
-  (.addEventListener el ev handler))
+(def dom-listen (if (.-addEventListener js/document)
+                  (fn dom-listen-good [el ev handler]
+                    (.addEventListener el ev handler))
+                  (fn dom-listen-ie [el ev handler]
+                    (try
+                      (.attachEvent el (str "on" ev) handler)
+                      (catch Object e
+                        (so/log "didnt support attachEvent" el e)))
+                    )))
 
 (defn on-query [root-el ev selector handler]
   (doseq [el (query selector root-el)]
     (dom-listen el (name ev) handler)
     ))
-
-(defn get-node [el]
-  (-to-dom el))
 
 (defn on
   ([el ev handler]
@@ -186,33 +201,14 @@
        (on-query el (first ev) (second ev) handler)
        (dom-listen el (name ev) handler))))
 
-(defn extract-ref [result node]
-  (if-let [ref (.getAttribute node "data-ref")]
-    (assoc result (keyword ref) node)
-    result))
-
-(deftype DomView [root refs]
-  IElement
-  (-to-dom [this] root)
-  ILookup
-  (-lookup [this k] (get refs k))
-  (-lookup [this k d] (get refs k d))
-  )
-
-(defn view [structure]
-  (let [node (build structure)
-        node-map (reduce extract-ref {} (query "[data-ref]" node))
-        node-map (extract-ref node-map node)]
-    (DomView. node node-map)))
-
 (defn by-id
-  ([id el] (.getElementById (-to-dom el) id))
+  ([id el] (.getElementById (dom-node el) id))
   ([id] (.getElementById js/document id)))
 
 (defn reset
   "clear node children"
   [node]
-  (dom/removeChildren (-to-dom node)))
+  (dom/removeChildren (dom-node node)))
 
 (defn remove [node]
   (if (satisfies? ISeqable node)
@@ -221,70 +217,70 @@
 
 (defn replace-node [old new]
   ;; wth reverse
-  (dom/replaceNode (-to-dom new)
-                   (-to-dom old)))
+  (dom/replaceNode (dom-node new)
+                   (dom-node old)))
 
 (defn text
-  ([el new-text] (set! (.-innerText (-to-dom el)) new-text))
-  ([el] (.-innerText (-to-dom el))))
+  ([el new-text] (set! (.-innerText (dom-node el)) new-text))
+  ([el] (.-innerText (dom-node el))))
 
 (defn check
   ([el] (check el true))
   ([el checked]
-     (set! (.-checked (-to-dom el)) checked)
+     (set! (.-checked (dom-node el)) checked)
      ))
 
-(defn checked? [el] (.-checked (-to-dom el)))
+(defn checked? [el] (.-checked (dom-node el)))
 
 (defn form-elements [el]
-  (NativeColl. (.-elements (-to-dom el))))
+  (NativeColl. (.-elements (dom-node el))))
 
 (defn children [el]
-  (NativeColl. (.-children (-to-dom el))))
+  (NativeColl. (.-children (dom-node el))))
 
 (defn attr
-  ([el key] (.getAttribute (-to-dom el) (name key)))
-  ([el key default] (or (.getAttribute (-to-dom el) (name key)) default)))
+  ([el key] (.getAttribute (dom-node el) (name key)))
+  ([el key default] (or (.getAttribute (dom-node el) (name key)) default)))
 
 (defn set-attr [el key value]
-  (dom/setProperties (-to-dom el) (clj->js {key value})))
+  (dom/setProperties (dom-node el) (clj->js {key value})))
 
 ;; dont ever include a script including this in <head>!
 (def data (if (.. js/document -body -dataset)
             (fn data-dataset [el key]
-              (aget (-> el -to-dom .-dataset) (name key)))
+              (aget (-> el dom-node .-dataset) (name key)))
             (fn data-get-attribute [el key]
-              (.getAttribute (-to-dom el) (str "data-" (name key)))) ;; fallback
+              (.getAttribute (dom-node el) (str "data-" (name key)))) ;; fallback
             ))
 
 (def set-data (if (.. js/document -body -dataset)
                 (fn set-data-dataset [el key value]
-                  (aset (-> el -to-dom .-dataset) (name key) (str value)))
+                  (aset (-> el dom-node .-dataset) (name key) (str value)))
                 (fn set-data-set-attribute [el key value]
-                  (.setAttribute (-to-dom el) (str "data-" (name key)) (str value)))
+                  (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
                 ))
 
 (defn set-html [node text]
-  (set! (.-innerHTML (-to-dom node)) text))
+  (set! (.-innerHTML (dom-node node)) text))
 
 (defn ancestor-by-class [el cls]
-  (dom/getAncestorByClass (-to-dom el) cls))
+  (dom/getAncestorByClass (dom-node el) cls))
 
 (defn ancestor-by-tag
-  ([el tag] (dom/getAncestorByTagNameAndClass (-to-dom el) (name tag)))
-  ([el tag cls] (dom/getAncestorByTagNameAndClass (-to-dom el) (name tag) (name cls))))
+  ([el tag] (dom/getAncestorByTagNameAndClass (dom-node el) (name tag)))
+  ([el tag cls] (dom/getAncestorByTagNameAndClass (dom-node el) (name tag) (name cls))))
 
 (defn get-value [dom]
-  (gf/getValue (-to-dom dom)))
+  (gf/getValue (dom-node dom)))
 
 (defn set-value [dom value]
-  (gf/setValue (-to-dom dom) value))
+  (gf/setValue (dom-node dom) value))
 
 (defn set-style [el styles]
-  (gs/setStyle (-to-dom el) (clj->js styles)))
+  (gs/setStyle (dom-node el) (clj->js styles)))
 
 (defn get-position [el]
-  (let [pos (gs/getPosition (-to-dom el))]
+  (let [pos (gs/getPosition (dom-node el))]
     {:x (.-x pos) :y (.-y pos)}))
 
 (defrecord Size [w h])
@@ -292,7 +288,7 @@
   (Size. (.-width size) (.-height size)))
 
 (defn get-size [el]
-  (size->clj (gs/getSize (-to-dom el))))
+  (size->clj (gs/getSize (dom-node el))))
 
 (defn get-viewport-size []
   (size->clj (dom/getViewportSize)))
