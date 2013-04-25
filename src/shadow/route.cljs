@@ -105,8 +105,8 @@
       )))
 
 (defn init [root-state base-path]
-  (.setEnabled history true)
   (.setUseFragment history false)
+  (.setEnabled history true)
 
   (let [path (.getToken history) 
         path-tokens (tokenize path)]

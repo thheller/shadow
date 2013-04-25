@@ -534,6 +534,8 @@
   ([node parent attr item-type item-key coll-transform]
      (let [attr (if (vector? attr) attr [attr])
 
+           update-children (atom true)
+
            coll-dom (dom/build node)
 
            make-item-fn (fn [[key val]]
@@ -547,15 +549,12 @@
                                          (fn [old new]
                                            ;; FIXME: this wont work for sets, only vec and map
 
-                                           ;; this is also called when the parent coll is updated
-                                           ;; kinda doing double work
-                                           (let [parent-key (conj attr (::coll-key obj))
-                                                 coll-val (get-in parent parent-key)]
-                                             ;; only update when its not current, aka child updated itself
-                                             (when-not (= coll-val new)
-                                               (log "direct child update" parent obj key parent-key new coll-val)
-                                               (update! parent assoc-in parent-key new)
-                                               ))))
+                                           (let [parent-key (conj attr (::coll-key obj))]
+                                             (log "direct child update" parent obj key parent-key new)
+                                             (reset! update-children false)
+                                             (update! parent assoc-in parent-key new)
+                                             (reset! update-children true)
+                                             )))
                             obj
                             ))
 
@@ -566,39 +565,47 @@
 
        (bind-change parent attr
                     (fn bind-children-watch [old new]
-                      (let [children (into [] (dom/children coll-dom))
-                            new-coll (vec (coll-transform new))
-                            count-children (count children)
-                            count-new (count new)
-                            diff (- count-new count-children)
+                      ;; when a child updated itself, we dont need to update it again
+                      (when @update-children
+                        (let [children (into [] (dom/children coll-dom))
+                              new-coll (vec (coll-transform new))
+                              count-children (count children)
+                              count-new (count new)
+                              diff (- count-new count-children)
 
-                            ;; exit lost children
-                            children (if (neg? diff)
-                                       (coll-destroy-children children count-children diff)
-                                       children)
-                            count-children (min count-new count-children)]
+                              ;; exit lost children
+                              children (if (neg? diff)
+                                         (coll-destroy-children children count-children diff)
+                                         children)
+                              count-children (min count-new count-children)]
 
-                        ;; update current
-                        (dotimes [idx count-children]
-                          (let [cn (nth children idx)
-                                cc (get-from-dom cn)
-                                ckey (::coll-key cc)
-                                cval (get cc item-key)
-                                [nkey nval] (nth new-coll idx)]
+                          ;; update current
+                          (dotimes [idx count-children]
+                            (let [cn (nth children idx)
+                                  cc (get-from-dom cn)
+                                  ckey (::coll-key cc)
+                                  cval (get cc item-key)
+                                  [nkey nval] (nth new-coll idx)]
 
-                            ;; only update when something changes
-                            (when-not (and (= ckey nkey) (= cval nval))
-                              (update! cc assoc item-key nval ::coll-key nkey)
-                              (notify! cc :bind-child-update ckey nkey cval nval)
-                              )))
+                              ;; only update when something changes
+                              (when-not (and (= ckey nkey) (= cval nval))
+                                ;; lets try this, updating gets way too messy when dealing with complex objects
+                                ;; just create a new object and destroy the old, also solves cyclic updates and should be faster
+                                (let [new-obj (make-item-fn [nkey nval])]
+                                  (dom/replace-node cn new-obj)
+                                  (destroy! cc)
+                                  (notify-tree! new-obj :dom-entered))
+                                ;;(update! cc assoc item-key nval ::coll-key nkey)
+                                ;;(notify! cc :bind-child-update ckey nkey cval nval)
+                                )))
 
-                        ;; enter new
-                        (when (pos? diff)
-                          (doseq [item (subvec new-coll count-children count-new)]
-                            (dom-enter coll-dom (make-item-fn item))))
+                          ;; enter new
+                          (when (pos? diff)
+                            (doseq [item (subvec new-coll count-children count-new)]
+                              (dom-enter coll-dom (make-item-fn item))))
 
-                        (notify! parent :bind-children-update)
-                        )))
+                          (notify! parent :bind-children-update)
+                          ))))
 
        coll-dom)))
 

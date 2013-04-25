@@ -179,6 +179,16 @@
     (when-let [init-idx (index-of options #(= init-val (first %)))]
       (set! (.-selectedIndex select) init-idx))
 
+    (so/bind-change obj options-key
+                     (fn [_ new]
+                       (let [curval (get-in obj attr)]
+                         (so/log "options changed" curval new)
+                         (dom/reset select)
+                         (doseq [option (make-options new)]
+                           (dom/append select option))
+                         (dom/set-value select (-encode type curval)))
+                       ))
+
     (dom/on select :change
             (fn [ev]
               (let [sval (dom/get-value select)
@@ -191,8 +201,6 @@
 
     select
     ))
-
-
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
