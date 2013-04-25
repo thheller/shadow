@@ -9,6 +9,31 @@
 (defprotocol IElement
   (-to-dom [this]))
 
+(defn- lazy-native-coll-seq [coll idx]
+  (when (< idx (.-length coll))
+    (lazy-seq (cons (aget coll idx)
+                    (lazy-native-coll-seq coll (inc idx))))
+    ))
+
+(deftype NativeColl [coll]
+  IDeref
+  (-deref [this] coll)
+
+  IIndexed
+  (-nth [this n] (aget coll n))
+  (-nth [this n not-found] (or (aget coll n) not-found))
+
+  ICounted
+  (-count [this] (.-length coll))
+
+  ISeqable
+  (-seq [this] (lazy-native-coll-seq coll 0))
+
+  IElement
+  (-to-dom [this] coll)
+  )
+
+
 (def dom-node (if (js* "((typeof HTMLElement) != 'undefined')")
                 -to-dom
                 (fn dom-node-ie [el]
@@ -85,7 +110,10 @@
     (dom/createDom tag-name props)
     ))
 
-(defn destructure-node [[nn np & nc]]
+(defn destructure-node [[nn np & nc :as node]]
+  (when-not (keyword? nn)
+    (throw (ex-info "invalid dom node" {:node node})))
+
   (cond
    (and (nil? np) (nil? nc)) ;; [:div.something]
    [(create-dom-node nn (js-obj)) '()]
@@ -96,6 +124,28 @@
 
 
 ;; restore sanity!
+
+(defn macro-node [tag-name tag-id tag-classes attrs & body]
+  (let [[attrs body] (if (map? attrs)
+                       [attrs body]
+                       [{} (cons attrs body)])
+        props (clj->js attrs)]
+
+    (when tag-id
+      (aset props "id" tag-id))
+
+    (when tag-classes
+      (aset props "class" (merge-class-string (aget props "class") tag-classes)))
+
+    (let [node (dom/createDom tag-name props)]
+      (doseq [child-struct body]
+        (if (seq? child-struct)
+          (doseq [child child-struct]
+            (dom/append node (dom-node child)))
+          (dom/append node (dom-node child-struct))
+          ))
+      node
+      )))
 
 (defn make-dom-node [structure]
   (let [[node node-children] (destructure-node structure)]
@@ -142,33 +192,16 @@
     (-to-dom [this] this)
     ))
 
+(when (js* "((typeof DocumentFragment) != 'undefined')")
+  (extend-protocol IElement
+    js/DocumentFragment
+    (-to-dom [this] this)
+    ))
+
 
 (defn append
   ([node] (dom/append (.-body js/document) (dom-node node)))
   ([el node] (dom/append (dom-node el) (dom-node node))))
-
-(defn- lazy-native-coll-seq [coll idx]
-  (when (< idx (.-length coll))
-    (lazy-seq (cons (aget coll idx)
-                    (lazy-native-coll-seq coll (inc idx))))
-    ))
-
-(deftype NativeColl [coll]
-  IDeref
-  (-deref [this] coll)
-
-  IIndexed
-  (-nth [this n] (aget coll n))
-  (-nth [this n not-found] (or (aget coll n) not-found))
-
-  ICounted
-  (-count [this] (.-length coll))
-
-  ISeqable
-  (-seq [this] (lazy-native-coll-seq coll 0))
-
-  )
-
 
 (defn query-one
   ([sel] (.querySelector js/document sel))
@@ -184,7 +217,7 @@
                   (fn dom-listen-ie [el ev handler]
                     (try
                       (.attachEvent el (str "on" ev) handler)
-                      (catch Object e
+                      (catch js/Object e
                         (so/log "didnt support attachEvent" el e)))
                     )))
 
@@ -262,6 +295,16 @@
 
 (defn set-html [node text]
   (set! (.-innerHTML (dom-node node)) text))
+
+(defn fragment [& nodes]
+  (let [fragment (.createDocumentFragment js/document)]
+    (doseq [node nodes]
+      (.appendChild fragment (-to-dom node)))
+    (NativeColl. fragment)
+    ))
+
+(defn str->fragment [s]
+  (NativeColl. (dom/htmlToDocumentFragment s)))
 
 (defn ancestor-by-class [el cls]
   (dom/getAncestorByClass (dom-node el) cls))

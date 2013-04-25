@@ -11,7 +11,6 @@
   (if (keyword? k) [k] k))
 
 (defprotocol IInputType
-  (-dom-type [this])
   (-validate [this string])
   (-encode [this val]))
 
@@ -35,8 +34,10 @@
 
 (defn int-type []
   (reify IInputType
-    (-dom-type [this] "number")
-    (-validate [this value] {:valid true :value (js/parseInt value)})
+    (-validate [this value]
+      (if (re-find #"^\d+$" value)
+        {:valid true :value (js/parseInt value)}
+        {:valid false :error "Ungültige Zahl."}))
     (-encode [this val]
       (str val))))
 
@@ -44,7 +45,6 @@
   ([] (text-type (fn [val] {:valid true :value val})))
   ([validate-with]
      (reify IInputType
-       (-dom-type [this] "text")
        (-validate [this string]
          (validate-with string))
        (-encode [this val]
@@ -52,7 +52,6 @@
 
 (defn keyword-type []
   (reify IInputType
-    (-dom-type [this] "text")
     (-validate [this string]
       {:valid true :value (keyword (.substring string 1))})
     (-encode [this val]
@@ -201,6 +200,7 @@
 
   (let [attr (as-path attr)
         capture (:capture attrs #{:change})
+        direct-update (get attrs :update true)
         init-val (get-in obj attr)
         init-sval (:value attrs)
         init-sval (if (nil? init-val)
@@ -208,16 +208,21 @@
                     (-encode type init-val))
 
         input (dom/build [:input (-> attrs
-                                     (dissoc :capture :bind)
+                                     (dissoc :capture :bind :update :type)
                                      (assoc :value init-sval
-                                            :type (-dom-type type)))])
+                                            :type (:type attrs "text")))])
 
         process-input (fn [e]
                         (let [sval (dom/get-value input)
                               {:keys [valid error value]} (-validate type sval)]
-                          (so/notify! obj :input-validated attr valid sval error)
-                          (when valid
-                            (so/update! obj assoc-in attr value)))
+                          (so/notify! obj :input-validated attr valid (if valid value sval) error)
+                          (cond
+                           (and valid direct-update)
+                           (so/update! obj assoc-in attr value)
+                           valid
+                           (so/notify! obj :input-update attr value)
+                           :else
+                           nil))
                         )]
 
     (when (:bind attrs)
@@ -292,6 +297,9 @@
 
 (def timeouts (atom {}))
 
+(defn timeout [delay callback]
+  (.setTimeout js/window callback delay))
+
 (defn keyed-timeout
   ([key callback] (keyed-timeout key callback 3000))
   ([key callback time-ms]
@@ -304,6 +312,26 @@
              timeout-id (.setTimeout js/window timeout-fn time-ms)]
          (swap! timeouts assoc key timeout-id)
          ))))
+
+(def local-storage (.-localStorage js/window))
+
+;; (def my-atom (ui/store-locally (atom defaults) "key"))
+;; (def my-atom (atom defaults)
+;; (ui/store-locally my-atom "key")
+
+(defn store-locally [atm name]
+  (let [stored-value (aget local-storage name)]
+
+    (when stored-value
+      (reset! atm (reader/read-string stored-value)))
+
+    (add-watch atm :store-locally
+               (fn [_ _ _ new]
+                 (aset local-storage name (pr-str new))
+                 ))
+
+    atm
+    ))
 
 
 

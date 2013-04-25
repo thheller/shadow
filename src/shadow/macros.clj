@@ -1,5 +1,6 @@
 (ns shadow.macros
-  (:require [clojure.walk :as walk]))
+  (:require [clojure.walk :as walk]
+            [clojure.string :as str]))
 
 (defmacro js-global [sym]
   (list 'js* (str sym)))
@@ -128,3 +129,48 @@
               ~@body))))
       )))
 
+
+(defn parse-tag [spec]
+  (let [spec (name spec)
+        fdot (.indexOf spec ".")
+        fhash (.indexOf spec "#")]
+    (cond
+     (and (= -1 fdot) (= -1 fhash))
+     [spec nil nil]
+
+     (= -1 fhash)
+     [(.substring spec 0 fdot)
+      nil
+      (str/replace (.substring spec (inc fdot)) #"\." " ")]
+
+     (= -1 fdot)
+     [(.substring spec 0 fhash)
+      (.substring spec (inc fhash))
+      nil]
+
+     (> fhash fdot)
+     (throw (str "cant have id after class?" spec))
+
+     :else
+     [(.substring spec 0 fhash)
+      (.substring spec (inc fhash) fdot)
+      (str/replace (.substring spec (inc fdot)) #"\." " ")])))
+
+
+(defn replace-dom-vectors [form]
+  (cond
+   (and (vector? form) (keyword? (first form)))
+   (let [[tag-def & body] form
+         [tag-name tag-id tag-classes] (parse-tag tag-def)]
+     (concat (list 'shadow.dom/macro-node tag-name tag-id tag-classes)
+             (map replace-dom-vectors body)))
+   (seq? form) (apply list (map replace-dom-vectors form))
+   :else
+   form
+   ))
+
+;; would be fancy but needs more thought
+(defmacro domfn [& body]
+  (let [fn-body (replace-dom-vectors body)]
+    `(fn ~@fn-body)
+    ))

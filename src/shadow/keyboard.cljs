@@ -84,7 +84,7 @@
               (if handler
                 (do
                   (so/log "keyboard handler: " key-id e oref handler)
-                  (handler oref))
+                  (handler oref e))
                 (recur (rest handlers)))
               )))))))
 

@@ -257,16 +257,7 @@
 
      ))
 
-(comment
-  "should I create basically instance methods? doesnt really seam that useful"
-  (defn call [obj handler & args]
-    (let [handler-fn (get-type-attr obj handler)]
-      (when-not handler-fn
-        (throw (ex-info "handler not found in object" {:handler handler :obj obj})))
-      (apply handler-fn (conj args obj))
-      )))
-
-(defn- bind-dom-events [oref dom dom-events]
+(defn bind-dom-events [oref dom dom-events]
   (when-not (zero? (rem (count dom-events) 2))
     (throw (ex-info "object defined invalid event" {:object-type (-type oref) :dom-events dom-events})))
 
@@ -282,18 +273,7 @@
                        (dom/ev-stop e)
                        (handler oref e))))))
 
-(defn dom-init [this]
-  (when-let [dom-fn (get-type-attr this :dom)]
-    (let [dom-events (get-type-attr this :dom-events [])
-          dom (dom/build (dom-fn this))]
 
-      ;; js/Text cant have attr, but no object should ever have text as root node?
-      (dom/set-data dom :oid (-id this))
-
-      (update! this assoc ::dom dom)
-      (bind-dom-events this dom dom-events)
-      dom
-      )))
 
 (defn- reaction-merge [result [event handler]]
   (let [current (get result event (list))]
@@ -430,24 +410,29 @@
                     (let [ov (get-in old attr)
                           nv (get-in new attr)]
                       (when-not (= ov nv)
-                        (callback ov nv))))))))
+                        (callback ov nv)))))) 
+     ))
 
-(defn create [type obj]
+(defn dom-enter [parent child]
+  (dom/append parent child)
+  (notify-tree! child :dom-entered))
+
+(defn create [type args]
   (when-not (contains? @object-defs type)
-    (throw (ex-info (str "cannot create unknown child type: " type) {:type type :obj obj})))
-  (when-not (map? obj)
-    (throw (ex-info "so/create second arg must be a map" {:obj obj})))
+    (throw (ex-info (str "cannot create unknown child type: " type) {:type type :args args})))
+  (when-not (map? args)
+    (throw (ex-info "so/create second arg must be a map" {:args args})))
 
   (let [oid (next-id)
-        parent (:parent obj)
+        parent (:parent args)
 
         odef (get @object-defs type)
 
-        obj (-> obj
+        obj (-> args
                 (assoc ::object-id oid
                        ::reactions (get odef ::reactions {}))
                 (merge-defaults type)
-                (dissoc :parent))
+                (dissoc :parent :dom))
 
         oref (ObjectRef. oid type obj [])]
 
@@ -459,8 +444,24 @@
 
     (notify! oref :init)
 
-    (when-let [dom (dom-init oref)]
-      (notify! oref :dom-init dom))
+    (let [dom-events (:dom-events odef [])]
+      (if-let [dom (:dom args)]
+        ;; attach+events
+        (do
+          (dom/set-data dom :oid oid)
+          (bind-dom-events oref dom dom-events)
+          (update! oref assoc ::dom dom)
+          (notify! oref :dom-init dom))
+        ;; create+events
+        (when-let [dom-fn (:dom odef)]
+          (let [dom (dom/build (dom-fn oref))]
+
+            (dom/set-data dom :oid oid)
+
+            (update! oref assoc ::dom dom)
+            (bind-dom-events oref dom dom-events)
+            (notify! oref :dom-init dom)
+            ))))
 
     (when-let [watches (:watch odef)]
       (doseq [[attr handler] (partition 2 watches)]
@@ -561,7 +562,7 @@
            ]
 
        (doseq [item (coll-transform (get-in parent attr))]
-         (dom/append coll-dom (make-item-fn item)))
+         (dom-enter coll-dom (make-item-fn item)))
 
        (bind-change parent attr
                     (fn bind-children-watch [old new]
@@ -594,7 +595,7 @@
                         ;; enter new
                         (when (pos? diff)
                           (doseq [item (subvec new-coll count-children count-new)]
-                            (dom/append coll-dom (make-item-fn item))))
+                            (dom-enter coll-dom (make-item-fn item))))
 
                         (notify! parent :bind-children-update)
                         )))

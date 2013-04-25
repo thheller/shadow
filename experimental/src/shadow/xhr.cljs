@@ -33,6 +33,8 @@
      (edn-transform (.-responseText req))
      (not= -1 (.indexOf content-type "json"))
      (json-transform (.-responseText req))
+     (not= -1 (.indexOf content-type "text/html"))
+     (.-responseText req)
      :else
      (throw (ex-info "unsupported content-type" {:req req :content-type content-type}))
      )))

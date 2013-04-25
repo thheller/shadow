@@ -1,6 +1,7 @@
 (ns shadow.route
+  (:import goog.history.Html5History)
   (:require [clojure.data :as data]
-            [goog.events.EventTarget]
+            [goog.events :as gev]
             [shadow.dom :as dom]
             [shadow.object :as so]
             ))
@@ -8,7 +9,11 @@
 
 ;; FIXME: rewrite this, its clearly broken in some places
 
+(def history (Html5History.))
 (def current-state (atom nil))
+(def current-path (atom (-> js/document
+                            (.-location)
+                            (.-pathname))))
 
 (defn pop-current []
   (let [current @current-state
@@ -43,9 +48,9 @@
         child-container (dom/query-one ".route-children" parent-dom)]
     (so/debug "enter-route" route-type route-args)
     (when-not child-container
-      (throw (str "route " (pr-str current) " does not have a #route-children in its dom, please add")))
+      (throw (str "route " (pr-str current) " does not have a .route-children in its dom, please add")))
 
-    (dom/append child-container child)
+    (so/dom-enter child-container child)
     (reset! current-state child)))
 
 (defn push-routes [tokens]
@@ -66,10 +71,7 @@
               (recur (rest routes))
               )))))))
 
-(defn current-path []
-  (-> js/document
-      (.-location)
-      (.-pathname)))
+
 
 (defn tokenize [path]
   (into [] (rest (.split (.substring path 1 (.-length path)) "/"))))
@@ -87,13 +89,12 @@
       (recur before after route-depth))))
 
 (defn reroute [path]
-  (let [before (tokenize (current-path))
+  (let [before (tokenize @current-path)
         after (tokenize path)]
     (when-not (= before after)
       (do-reroute before after 0)
-      (-> js/window
-          (.-history)
-          (.pushState nil nil path)))
+      (.setToken history (.substring path 1))
+      (reset! current-path path))
     ))
 
 (defn intercept-clicks-on-a [e]
@@ -104,15 +105,21 @@
       )))
 
 (defn init [root-state base-path]
-  (let [path (-> js/document
-                 (.-location)
-                 (.-pathname))
+  (.setEnabled history true)
+  (.setUseFragment history false)
+
+  (let [path (.getToken history) 
         path-tokens (tokenize path)]
 
     (reset! current-state root-state)
 
-    (when (.. js/window -history -pushState) 
-      (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a))
+    (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
+
+    (gev/listen history "navigate"
+                (fn [e]
+                  (when (.-isNavigation e)
+                    (reroute (str "/" (.-token e)))
+                    )))
 
     (push-routes path-tokens)
     ))
