@@ -50,6 +50,7 @@
 
     (dom/append backdrop)
     (dom/append popup)
+    (so/notify-tree! popup :dom-entered)
     (so/notify! popup :popup-open)
     popup
     ))

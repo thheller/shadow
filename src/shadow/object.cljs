@@ -98,7 +98,7 @@
   [[:cause "cause of destruction, :parent means the parent was destroyed, :direct is default"]])
 
 (define-event :dom-init
-  "called after the dom was created, use it to put it into the document"
+  "called after the dom was created but has not entered the document yet"
   [[:dom "the dom that was created"]])
 
 (define-event :dom-entered
@@ -114,9 +114,6 @@
 (define-event :bind-children-update
   "need to rethink this"
   [])
-
-(defn behavior* [& args]
-  (warn "defbehavior is gone" (first args)))
 
 (defprotocol IObject
   (-id [this])
@@ -296,7 +293,7 @@
   (let [odef (apply hash-map args)
 
         reactions (merge-reactions {} (:on odef []))
-        reactions (reduce merge-reactions reactions (:behaviors odef []))
+        reactions (reduce merge-reactions reactions (reverse (:behaviors odef [])))
 
         odef (assoc odef
                ::id id

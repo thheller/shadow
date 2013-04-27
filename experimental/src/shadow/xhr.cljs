@@ -39,14 +39,19 @@
      (throw (ex-info "unsupported content-type" {:req req :content-type content-type}))
      )))
 
-(defn request [method url data options]
-  (let [req (gxhr/send (name method)
-                       url
-                       (when-not (or (nil? data) (= :GET method))
-                         (pr-str data))
-                       (make-request-options (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8"))
-                       )]
-    (goog.result/transform req auto-transform)))
+(defn request
+  ([method url]
+     (request method url nil {}))
+  ([method url data]
+     (request method url data {}))
+  ([method url data options]
+      (let [req (gxhr/send (name method)
+                           url
+                           (when-not (or (nil? data) (= :GET method))
+                             (pr-str data))
+                           (make-request-options (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8"))
+                           )]
+        (goog.result/transform req auto-transform))))
 
 
 (defn get-edn [url]

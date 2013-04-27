@@ -10,6 +10,11 @@
 (defn as-path [k]
   (if (keyword? k) [k] k))
 
+;; behavior
+(def update-on-change
+  [:input-change (fn [obj attr value]
+                   (so/update! obj assoc-in attr value))])
+
 (defprotocol IInputType
   (-validate [this string])
   (-encode [this val]))
@@ -100,107 +105,113 @@
                                        items))])
                  ))))
 
-(defn dom-select-grouped [obj attr type options-key select-attrs]
-  (when-not (satisfies? IInputType type)
-    (throw (ex-info "dom select type must support protocol InputType" {:type type})))
+(defn dom-select-grouped
+  ([obj attr type options-key]
+     (dom-select-grouped obj attr type options-key {}))
+  ([obj attr type options-key select-attrs]
+      (when-not (satisfies? IInputType type)
+        (throw (ex-info "dom select type must support protocol InputType" {:type type})))
 
-  ;; options-key should point to options in obj (I may want to bind to them!)
-  ;; options should be [["group label" [[value "label"]
-  ;;                                    [value "label"]]]
+      ;; options-key should point to options in obj (I may want to bind to them!)
+      ;; options should be [["group label" [[value "label"]
+      ;;                                    [value "label"]]]
 
-  (let [attr (as-path attr)
-        init-val (get-in obj attr)
-        options (get obj options-key)
+      (let [attr (as-path attr)
+            init-val (get-in obj attr)
+            options (get obj options-key)
 
-        _ (when-not (vector? options)
-            (throw (ex-info "select options should be a vector" {:options options})))
+            _ (when-not (vector? options)
+                (throw (ex-info "select options should be a vector" {:options options})))
 
-        make-options (fn [options]
-                       ;; FIXME: this should probably do some recursive action
-                       ;; one may nest deeper than 1 lvl?
-                       (for [[group-label group-options] options]
-                         (if (string? group-options)
-                           ;; single option
-                           [:option {:value (-encode type group-label)} group-options]
-                           ;; optgroup
-                           [:optgroup {:label group-label}
-                            (for [[value label] group-options]
-                              [:option {:value (-encode type value)
-                                        :selected (when (= init-val value) true)}
-                               (str label)])])))
+            make-options (fn [options]
+                           ;; FIXME: this should probably do some recursive action
+                           ;; one may nest deeper than 1 lvl?
+                           (for [[group-label group-options] options]
+                             (if (string? group-options)
+                               ;; single option
+                               [:option {:value (-encode type group-label)} group-options]
+                               ;; optgroup
+                               [:optgroup {:label group-label}
+                                (for [[value label] group-options]
+                                  [:option {:value (-encode type value)
+                                            :selected (when (= init-val value) true)}
+                                   (str label)])])))
 
-        select (dom/build [:select select-attrs (make-options options)])]
+            select (dom/build [:select select-attrs (make-options options)])]
 
-    (so/bind-change obj options-key
-                     (fn [_ new]
-                       (let [curval (get-in obj attr)]
-                         (so/log "options changed" curval new)
-                         (dom/reset select)
-                         (doseq [option (make-options new)]
-                           (dom/append select option))
-                         (dom/set-value select (-encode type curval)))
-                       ))
+        (so/bind-change obj options-key
+                        (fn [_ new]
+                          (let [curval (get-in obj attr)]
+                            (so/log "options changed" curval new)
+                            (dom/reset select)
+                            (doseq [option (make-options new)]
+                              (dom/append select option))
+                            (dom/set-value select (-encode type curval)))
+                          ))
 
-    (dom/on select :change
-            (fn [ev]
-              (let [sv (dom/get-value select)
-                    {:keys [valid value error]} (-validate type sv)]
-                (so/notify! obj :input-validated attr valid value error)
-                (if valid
-                  (so/update! obj assoc-in attr value)
-                  (so/log "dom-select-grouped with invalid value?" obj attr value select)
-                  ))))
+        (dom/on select :change
+                (fn [ev]
+                  (let [sv (dom/get-value select)
+                        {:keys [valid value error]} (-validate type sv)]
+                    (so/notify! obj :input-validated attr valid value error)
+                    (if valid
+                      (so/notify! obj :input-change attr value select)
+                      (so/log "dom-select-grouped with invalid value?" obj attr value select)
+                      ))))
 
-    select
-    ))
+        select
+        )))
 
-(defn dom-select [obj attr type options-key select-attrs]
-  (when-not (satisfies? IInputType type)
-    (throw (ex-info "dom select type must support protocol InputType" {:type type})))
+(defn dom-select
+  ([obj attr type options-key]
+     (dom-select obj attr type options-key {}))
+  ([obj attr type options-key select-attrs]
+     (when-not (satisfies? IInputType type)
+       (throw (ex-info "dom select type must support protocol InputType" {:type type})))
 
-  ;; options-key should point to options in obj (I may want to bind to them!)
-  ;; options should be [[value "label"] [value "label"]
+     ;; options-key should point to options in obj (I may want to bind to them!)
+     ;; options should be [[value "label"] [value "label"]
 
-  (let [attr (as-path attr)
-        init-val (get-in obj attr)
-        multiple (:multiple select-attrs)
+     (let [attr (as-path attr)
+           init-val (get-in obj attr)
+           multiple (:multiple select-attrs)
 
-        options (get obj options-key)
+           options (get obj options-key)
 
-        _ (when-not (vector? options)
-            (throw (ex-info "select options should be a vector" {:options options})))
+           _ (when-not (vector? options)
+               (throw (ex-info "select options should be a vector" {:options options})))
 
-        make-options (fn [options]
-                       (for [[value label] options]
-                         [:option {:value (-encode type value)} (str label)]))
+           make-options (fn [options]
+                          (for [[value label] options]
+                            [:option {:value (-encode type value)} (str label)]))
 
-        select (dom/build [:select select-attrs (make-options options)])]
+           select (dom/build [:select select-attrs (make-options options)])]
 
-    (when-let [init-idx (index-of options #(= init-val (first %)))]
-      (set! (.-selectedIndex select) init-idx))
+       (when-let [init-idx (index-of options #(= init-val (first %)))]
+         (set! (.-selectedIndex select) init-idx))
 
-    (so/bind-change obj options-key
-                     (fn [_ new]
-                       (let [curval (get-in obj attr)]
-                         (so/log "options changed" curval new)
-                         (dom/reset select)
-                         (doseq [option (make-options new)]
-                           (dom/append select option))
-                         (dom/set-value select (-encode type curval)))
-                       ))
+       (so/bind-change obj options-key
+                       (fn [_ new]
+                         (let [curval (get-in obj attr)]
+                           (so/log "options changed" curval new)
+                           (dom/reset select)
+                           (doseq [option (make-options new)]
+                             (dom/append select option))
+                           (dom/set-value select (-encode type curval)))
+                         ))
 
-    (dom/on select :change
-            (fn [ev]
-              (let [sval (dom/get-value select)
-                    {:keys [valid value error] :as result} (-validate type sval)]
-                (if valid
-                  (so/update! obj assoc-in attr value)
-                  (so/log "dom-select with invalid value?" obj attr sval value select result)
-                  ))
-              ))
+       (dom/on select :change
+               (fn [ev]
+                 (let [sval (dom/get-value select)
+                       {:keys [valid value error] :as result} (-validate type sval)]
+                   (if valid
+                     (so/notifty! obj :input-change attr value select)
+                     (so/log "dom-select with invalid value?" obj attr sval value select result)
+                     ))
+                 ))
 
-    select
-    ))
+       select
+       )))
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
@@ -208,7 +219,6 @@
 
   (let [attr (as-path attr)
         capture (:capture attrs #{:change})
-        direct-update (get attrs :update true)
         init-val (get-in obj attr)
         init-sval (:value attrs)
         init-sval (if (nil? init-val)
@@ -216,21 +226,16 @@
                     (-encode type init-val))
 
         input (dom/build [:input (-> attrs
-                                     (dissoc :capture :bind :update :type)
+                                     (dissoc :capture :bind :type)
                                      (assoc :value init-sval
                                             :type (:type attrs "text")))])
 
-        process-input (fn [e]
+        process-input (fn [ev-type e]
                         (let [sval (dom/get-value input)
                               {:keys [valid error value]} (-validate type sval)]
                           (so/notify! obj :input-validated attr valid (if valid value sval) error)
-                          (cond
-                           (and valid direct-update)
-                           (so/update! obj assoc-in attr value)
-                           valid
-                           (so/notify! obj :input-update attr value)
-                           :else
-                           nil))
+                          (when valid
+                            (so/notify! obj ev-type attr value input)))
                         )]
 
     (when (:bind attrs)
@@ -244,11 +249,11 @@
               (fn [ev]
                 (when (= 13 (.-keyCode ev))
                   (dom/ev-stop ev)
-                  (process-input ev)
+                  (process-input :input-enter ev)
                   ))))
 
     (when (contains? capture :change)
-      (dom/on input :change process-input))
+      (dom/on input :change #(process-input :input-change %)))
 
     input
     ))
@@ -267,7 +272,7 @@
                          )))
 
     (dom/on input :change (fn [e]
-                            (so/update! obj assoc-in attr (dom/checked? input))))
+                            (so/notify! obj :input-change attr (dom/checked? input) input)))
 
     input
     ))
@@ -297,8 +302,7 @@
                                   {:keys [valid error value]} (-validate type sval)]
                               (so/notify! obj :input-validated attr valid sval error)
                               (when valid
-                                (so/update! obj assoc-in attr value)))
-                            ))
+                                (so/notify! obj :input-change attr value input)))))
 
     input
     ))
