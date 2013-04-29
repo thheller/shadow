@@ -205,7 +205,7 @@
                  (let [sval (dom/get-value select)
                        {:keys [valid value error] :as result} (-validate type sval)]
                    (if valid
-                     (so/notifty! obj :input-change attr value select)
+                     (so/notify! obj :input-change attr value select)
                      (so/log "dom-select with invalid value?" obj attr sval value select result)
                      ))
                  ))
