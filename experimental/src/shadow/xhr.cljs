@@ -17,12 +17,11 @@
                 :headers "headers"
                 :mime-type "mimeType"
                 })
+
 (defn make-request-options [options]
   (let [obj (js-obj)]
     (doseq [[k v] options]
       (aset obj (get goog-keys k) (clj->js v)))
-
-    (.log js/console "request-options" obj)
     obj
     ))
 

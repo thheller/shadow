@@ -97,6 +97,10 @@
       (reset! current-path path))
     ))
 
+;; called from the app itself, should maybe do some extra checks?
+(defn navigate! [path]
+  (reroute path))
+
 (defn intercept-clicks-on-a [e]
   (let [target (.-target e)]
     (when (= "A" (.-nodeName target))

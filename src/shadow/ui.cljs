@@ -118,7 +118,7 @@
 
       (let [attr (as-path attr)
             init-val (get-in obj attr)
-            options (get obj options-key)
+            options (get obj options-key [])
 
             _ (when-not (vector? options)
                 (throw (ex-info "select options should be a vector" {:options options})))
@@ -176,7 +176,7 @@
            init-val (get-in obj attr)
            multiple (:multiple select-attrs)
 
-           options (get obj options-key)
+           options (get obj options-key [])
 
            _ (when-not (vector? options)
                (throw (ex-info "select options should be a vector" {:options options})))
@@ -344,6 +344,41 @@
 
     atm
     ))
+
+
+
+(so/define-event :nav-selected
+  "when a nav item is clicked"
+  [[:nav-value "value of the tab"]])
+
+(so/define ::navbar
+  :dom (fn [{:keys [navbar default] :as this}]
+         [:ul.navbar
+          (for [[nav-id nav-label] navbar
+                :let [nav-value (-> nav-id str (.substring 1))
+                      li-attr {:data-nav nav-value}
+                      li-attr (if (= nav-id default)
+                                (assoc li-attr :class "active")
+                                li-attr)]]
+            [:li li-attr
+             [:a {:href (str "#" nav-value)} nav-label]]
+            )])
+
+  :dom-events [[:click "li"] (fn [this e el]
+                               (doseq [t (dom/children this)]
+                                 (dom/remove-class t "active"))
+                               (dom/add-class el "active")
+
+                               (let [nav-value (keyword (dom/data el :nav))]
+                                 (so/notify! (:parent this) :nav-selected nav-value)
+                                 ))])
+
+(defn navbar [parent nav-data default]
+  (let [pairs (vec (partition 2 nav-data))]
+    (so/create ::navbar {:parent parent
+                          :navbar pairs
+                          :default default})))
+
 
 
 

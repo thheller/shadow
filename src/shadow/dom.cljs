@@ -213,10 +213,11 @@
 
 (def dom-listen (if (.-addEventListener js/document)
                   (fn dom-listen-good [el ev handler]
-                    (.addEventListener el ev handler))
+                    (.addEventListener el ev (fn [e]
+                                               (handler e el))))
                   (fn dom-listen-ie [el ev handler]
                     (try
-                      (.attachEvent el (str "on" ev) handler)
+                      (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
                       (catch js/Object e
                         (so/log "didnt support attachEvent" el e)))
                     )))

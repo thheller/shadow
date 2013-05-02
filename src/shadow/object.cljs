@@ -263,12 +263,12 @@
       (throw (str "ev with nil handler " (pr-str ev))))
 
     (let [handler (if (keyword? handler)
-                    (fn [this e]
-                      (notify! this handler e))
+                    (fn [this e el]
+                      (notify! this handler e el))
                     handler)]
-      (dom/on dom ev (fn dom-event-handler [e]
+      (dom/on dom ev (fn dom-event-handler [e el]
                        (dom/ev-stop e)
-                       (handler oref e))))))
+                       (handler oref e el))))))
 
 
 
