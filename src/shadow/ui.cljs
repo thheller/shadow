@@ -16,8 +16,8 @@
                    (so/update! obj assoc-in attr value))])
 
 (defprotocol IInputType
-  (-validate [this string])
-  (-encode [this val]))
+  (-decode [this string] "decode from string to whatever")
+  (-encode [this val] "encode from whatever to string to use in dom"))
 
 (defn future-node
   "lazily create a dom node when attr first appears on object"
@@ -39,26 +39,23 @@
 
 (defn int-type []
   (reify IInputType
-    (-validate [this value]
-      (if (re-find #"^\d+$" value)
-        {:valid true :value (js/parseInt value)}
-        {:valid false :error "Ungültige Zahl."}))
+    (-decode [this value]
+      (when (re-find #"^\d+$" value)
+        (js/parseInt value)))
     (-encode [this val]
       (str val))))
 
-(defn text-type
-  ([] (text-type (fn [val] {:valid true :value val})))
-  ([validate-with]
-     (reify IInputType
-       (-validate [this string]
-         (validate-with string))
-       (-encode [this val]
-         (str val)))))
+(defn text-type []
+  (reify IInputType
+    (-decode [this string]
+      (.trim string))
+    (-encode [this val]
+      (str val))))
 
 (defn keyword-type []
   (reify IInputType
-    (-validate [this string]
-      {:valid true :value (keyword (.substring string 1))})
+    (-decode [this string]
+      (keyword (.substring string 1)))
     (-encode [this val]
       (str val))))
 
@@ -69,16 +66,28 @@
    [:value "the new value"]
    [:input "the dom input?"]])
 
+(so/define-event :input-blur "when the user leaves an input field, should follow :input-decoded unlike :input-change will also fire when input wasnt changed"
+  [[:attr "the attr arg"]
+   [:value "the new value"]
+   [:input "the dom input?"]])
+
 (so/define-event :input-enter "when enter was pressed and the value validated"
   [[:attr "attr"]
    [:value "value"]
    [:input "input"]])
 
-(so/define-event :input-validated "whenever the input was validated"
-  [[:attr "attr"]
-   [:valid "boolean"]
-   [:sval "the string value entered"]
-   [:error "the validation error"]])
+(so/define-event :input-validated "whenever the input was validated to be correct"
+  [[:attr "attr eg. [:some :attr]"]
+   [:value "the value"]
+   [:dom-input "the dom node the value came from"]])
+
+(so/define-event :input-error "whenever the input was validated to be falsy"
+  [[:attr "attr eg. [:some :attr]"]
+   [:msg "the error msg"] 
+   [:dom-input "the dom node the string value came from"]])
+
+(so/define-event :force-validation "trigger a validation and thus resulting in input-validated/input-error"
+  [])
 
 
 (defn index-of [items check-fn]
@@ -90,6 +99,9 @@
         (if (check-fn f)
           idx
           (recur (rest items) (inc idx)))))))
+
+(defn dom-name [attr]
+  (str/join "." (map name attr)))
 
 ;; http://zilence.net/sj.gif
 (defn group-select-options
@@ -105,6 +117,30 @@
                                        items))])
                  ))))
 
+(defn never-has-errors [obj field value string-value]
+  nil)
+
+(defn do-validation
+  "validate attr with value decoded from string-value via input
+   notifies obj with [:input-error attr error-msg input] when an error is found
+   notifies obj with [:input-validated attr value input] when no error is found"
+  [{:keys [a parent] :as input} value string-value]
+  (let [get-error-fn (so/get-type-attr parent :input-get-error never-has-errors)]
+    (if-let [msg (get-error-fn parent a string-value value)]
+      (do
+        (so/notify! parent :input-error a msg input)
+        false)
+      (do
+        (so/notify! parent :input-validated a value input)
+        true))
+      ))
+
+(defn quick-validation [{:keys [input-type] :as this}]
+  (let [sval (dom/get-value this)
+        value (-decode input-type sval)]
+    (do-validation this value sval)
+    ))
+                             
 (defn dom-select-grouped
   ([obj attr type options-key]
      (dom-select-grouped obj attr type options-key {}))
@@ -152,15 +188,36 @@
         (dom/on select :change
                 (fn [ev]
                   (let [sv (dom/get-value select)
-                        {:keys [valid value error]} (-validate type sv)]
-                    (so/notify! obj :input-validated attr valid value error)
-                    (if valid
-                      (so/notify! obj :input-change attr value select)
-                      (so/log "dom-select-grouped with invalid value?" obj attr value select)
-                      ))))
+                        value (-decode type sv)]
+                    (when (do-validation obj value sv)
+                      (so/notify! obj :input-change attr value select))
+                  )))
 
         select
         )))
+
+(defn dom-select-options [input-type options]
+  (for [[value label] options
+        :let [label (or label value)]]
+    [:option {:value (-encode input-type value)} (str label)]))
+
+(so/define ::dom-select
+  :dom (fn [{:keys [attrs options input-type] :as this}]
+         [:select attrs (dom-select-options input-type options)])
+
+  :on [:force-validation quick-validation
+       :change-options (fn [{:keys [input-type] :as this} new-options]
+                         (let [curval (dom/get-value this)]
+                           (dom/reset this)
+                           (dom/append this (dom-select-options input-type new-options))
+                           (dom/set-value this curval)))]
+
+  :dom-events [:change  (fn [{:keys [a parent input-type] :as this} ev]
+                          (let [sval (dom/get-value this)
+                                value (-decode input-type sval)]
+                            (when (do-validation this value sval)
+                              (so/notify! parent :input-change a value this))) 
+                          )])
 
 (defn dom-select
   ([obj attr type options-key]
@@ -181,37 +238,48 @@
            _ (when-not (vector? options)
                (throw (ex-info "select options should be a vector" {:options options})))
 
-           make-options (fn [options]
-                          (for [[value label] options]
-                            [:option {:value (-encode type value)} (str label)]))
+           select (so/create ::dom-select
+                             {:parent obj
+                              :attrs select-attrs
+                              :options options
+                              :a attr
+                              :input-type type})]
 
-           select (dom/build [:select select-attrs (make-options options)])]
-
-       (when-let [init-idx (index-of options #(= init-val (first %)))]
-         (set! (.-selectedIndex select) init-idx))
-
+       ;; FIXME: possible leakage when the select is destroyed but the parent is not
+       ;; watcher keeps both objs alive when it shouldnt
        (so/bind-change obj options-key
-                       (fn [_ new]
-                         (let [curval (get-in obj attr)]
-                           (so/log "options changed" curval new)
-                           (dom/reset select)
-                           (doseq [option (make-options new)]
-                             (dom/append select option))
-                           (dom/set-value select (-encode type curval)))
+                       (fn [old new]
+                         (so/notify! select :change-options new)
                          ))
-
-       (dom/on select :change
-               (fn [ev]
-                 (let [sval (dom/get-value select)
-                       {:keys [valid value error] :as result} (-validate type sval)]
-                   (if valid
-                     (so/notify! obj :input-change attr value select)
-                     (so/log "dom-select with invalid value?" obj attr sval value select result)
-                     ))
-                 ))
 
        select
        )))
+
+(defn process-dom-input [{:keys [parent a input-type] :as this} ev-type]
+  (let [sval (dom/get-value this)
+        value (-decode input-type sval)]
+    (when (do-validation this value sval)
+      (so/notify! parent ev-type a value this))))
+
+(so/define ::dom-input
+  :dom (fn [{:keys [attrs] :as this}]
+         [:input (merge {:type "text"} attrs)])
+
+  :on [:force-validation quick-validation]
+
+  :dom-events [:blur (fn [{:keys [input-type capture] :as this} ev]
+                       (if (contains? capture :blur)
+                         (process-dom-input this :input-blur)
+                         ;; special case processsing for empty fields since
+                         ;; change doesnt fire if you enter an empty field
+                         ;; and leave it empty (but I still want validation to fire)
+                         (let [sval (dom/get-value this)]
+                           (when (= sval "")
+                             (let [value (-decode input-type sval)]
+                               (do-validation this value sval))))))
+
+               :change (fn [this]
+                         (process-dom-input this :input-change))])
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
@@ -225,38 +293,16 @@
                     ""
                     (-encode type init-val))
 
-        input (dom/build [:input (-> attrs
-                                     (dissoc :capture :bind :type)
-                                     (assoc :value init-sval
-                                            :type (:type attrs "text")))])
+        input-attrs (-> attrs
+                        (dissoc :capture :bind)
+                        (assoc :value init-sval
+                               :name (dom-name attr)))]
 
-        process-input (fn [ev-type e]
-                        (let [sval (dom/get-value input)
-                              {:keys [valid error value]} (-validate type sval)]
-                          (so/notify! obj :input-validated attr valid (if valid value sval) error)
-                          (when valid
-                            (so/notify! obj ev-type attr value input)))
-                        )]
-
-    (when (:bind attrs)
-      (so/bind-change obj attr
-                       (fn [old new]
-                         (dom/set-value input (-encode type new))
-                         )))
-
-    (when (contains? capture :enter)
-      (dom/on input :keyup
-              (fn [ev]
-                (when (= 13 (.-keyCode ev))
-                  (dom/ev-stop ev)
-                  (process-input :input-enter ev)
-                  ))))
-
-    (when (contains? capture :change)
-      (dom/on input :change #(process-input :input-change %)))
-
-    input
-    ))
+    (so/create ::dom-input {:parent obj
+                            :attrs input-attrs
+                            :capture capture
+                            :input-type type
+                            :a attr})))
 
 (defn dom-checkbox [obj attr attrs]
   (let [attr (as-path attr)
@@ -299,9 +345,8 @@
 
     (dom/on input :change (fn [e]
                             (let [sval (dom/get-value input)
-                                  {:keys [valid error value]} (-validate type sval)]
-                              (so/notify! obj :input-validated attr valid sval error)
-                              (when valid
+                                  value (-decode type sval)]
+                              (when (do-validation obj attr value sval input)
                                 (so/notify! obj :input-change attr value input)))))
 
     input
@@ -361,7 +406,7 @@
                                 (assoc li-attr :class "active")
                                 li-attr)]]
             [:li li-attr
-             [:a {:href (str "#" nav-value)} nav-label]]
+             [:a nav-label]]
             )])
 
   :dom-events [[:click "li"] (fn [this e el]

@@ -122,9 +122,16 @@
   (-update [this update-fn] "update and notify watches")
   (-update-direct [this update-fn] "update but dont notify watches"))
 
+(defn get-type [this]
+  (-type this))
+
 (defn get-type-attr
-  ([oref key] (get-in @object-defs [(-type oref) key]))
-  ([oref key default] (get-in @object-defs [(-type oref) key] default)))
+  ([oref key]
+     (let [type-id (if (keyword? oref) oref (-type oref))]
+       (get-in @object-defs [type-id key])))
+  ([oref key default]
+     (let [type-id (if (keyword? oref) oref (-type oref))]
+       (get-in @object-defs [type-id key] default))))
 
 (defn ^:export get-dom [oref]
   (::dom oref))
@@ -173,17 +180,16 @@
   (when-not (contains? @events ev)
     (debug "triggering undefined notifiction" (pr-str ev) " with " (pr-str args)))
 
-  (let [reactions-to-trigger (get-in oref [::reactions ev] (list))]
+  (when-let [reactions-to-trigger (get-in oref [::reactions ev])]
     ;; (debug "notify!" (-id oref) (-type oref) ev reactions-to-trigger args)
     (doseq [rfn reactions-to-trigger]
       (apply rfn (cons oref args)))
     ))
 
 (defn visit-tree [root-obj visit-fn]
-  (visit-fn root-obj)
   (doseq [child (get-children root-obj)]
-    (visit-tree child visit-fn)
-    ))
+    (visit-tree child visit-fn))
+  (visit-fn root-obj))
 
 (defn notify-tree! [oref ev & args]
   (let [notify-fn (fn [obj]
@@ -376,7 +382,7 @@
       (get data k)))
   (-lookup [this k d]
     (if (= :parent k)
-      (or (get-parent this) k)
+      (get-parent this)
       (get data k d)))
 
   Object
@@ -410,9 +416,20 @@
                         (callback ov nv)))))) 
      ))
 
+(defn in-dom? [node]
+  (loop [current node]
+    (if (= current js/document)
+      true
+      (when-let [p (.-parentNode current)]
+        (recur p)
+        ))))
+
 (defn dom-enter [parent child]
   (dom/append parent child)
-  (notify-tree! child :dom-entered))
+  (when (in-dom? parent)
+    ;; only notify when the parent is already in the dom
+    ;; not sure if its useful to keep track of this inside the object itself?
+    (notify-tree! child :dom-entered)))
 
 (defn create [type args]
   (when-not (contains? @object-defs type)

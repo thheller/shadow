@@ -4,6 +4,7 @@
             [goog.events :as gev]
             [shadow.dom :as dom]
             [shadow.object :as so]
+            [clojure.string :as str]
             ))
 
 
@@ -11,9 +12,20 @@
 
 (def history (Html5History.))
 (def current-state (atom nil))
+
+(def route-base-path (atom nil))
+(def use-url-fragment (atom false))
+
 (def current-path (atom (-> js/document
                             (.-location)
                             (.-pathname))))
+
+;; why would u ever want an empty token, "/" is way saner
+(defn fix-token [token]
+  (if (= token "") "/" token))
+
+
+(so/define-event :route-activate "sent when routing is complete" [])
 
 (defn pop-current []
   (let [current @current-state
@@ -22,14 +34,17 @@
     (so/destroy! current)
     (reset! current-state parent)))
 
-(defn route-match? [parts tokens]
-  (when (<= (count parts) (count tokens))
+(defn route-match? [parts input-tokens]
+  (when (<= (count parts) (count input-tokens))
     (loop [parts parts
-           tokens tokens
+           tokens input-tokens
            route-depth 0
            route-args {}]
       (if (empty? parts)
-        [(assoc route-args ::route-depth route-depth) tokens]
+        [(assoc route-args
+           ::route-depth route-depth
+           ::route-tokens (vec (take route-depth input-tokens)))
+         tokens]
         (let [pf (first parts)
               tf (first tokens)]
           (cond
@@ -74,28 +89,43 @@
 
 
 (defn tokenize [path]
-  (into [] (rest (.split (.substring path 1 (.-length path)) "/"))))
+  (let [path (if (= "/" (first path))
+               (.substring path 1)
+               path)]
+    (so/log "tokenize" path (.split path "/"))
+    (.split path "/")
+    ))
 
-(defn do-reroute [before after depth]
-  (let [route-depth (+ depth (::route-depth @current-state))
-        base-path (drop-last route-depth before)
-        base-length (count base-path)
-        base-test (take base-length after)]
-    (pop-current)
-    (if (= base-path base-test)
-      (do
-        (so/log "will push now" @current-state)
-        (push-routes (drop base-length after)))
-      (recur before after route-depth))))
+(defn get-current-path []
+  (loop [current @current-state
+         result []]
+    (if-let [tokens (::route-tokens current)]
+      (recur (:parent current) (conj result tokens))
+      (str "/" (str/join "/" (flatten (reverse result))))
+      )))
+
+(defn starts-with [a b]
+  (= 0 (.indexOf a b)))
 
 (defn reroute [path]
-  (let [before (tokenize @current-path)
-        after (tokenize path)]
-    (when-not (= before after)
-      (do-reroute before after 0)
-      (.setToken history (.substring path 1))
-      (reset! current-path path))
-    ))
+  
+  (loop [current-path (get-current-path)]
+    (so/log "reroute" {:path path
+                       :current current-path})
+    (if (= path current-path)
+     true
+     (if (starts-with path current-path)
+       (let [new-tokens (tokenize (.substring path (count current-path)))]
+         (so/log "new-tokens" new-tokens)
+         (push-routes new-tokens)
+         (.setToken history path))
+
+       ;; else need to drop down
+       (do
+         (pop-current)
+         (recur (get-current-path))))))
+
+  (so/notify! @current-state :route-activate))
 
 ;; called from the app itself, should maybe do some extra checks?
 (defn navigate! [path]
@@ -105,25 +135,33 @@
   (let [target (.-target e)]
     (when (= "A" (.-nodeName target))
       (dom/ev-stop e)
-      (reroute (.-pathname target))
+      (reroute
+       (if @use-url-fragment 
+         (.substring (.-hash target) 1)
+         (.-pathname target)))
       )))
 
-(defn init [root-state base-path]
-  (.setUseFragment history false)
-  (.setEnabled history true)
+(defn init
+  ([root-state base-path]
+     (init root-state base-path false))
+  ([root-state base-path use-fragment]
+     (.setUseFragment history use-fragment)
+     (.setEnabled history true)
 
-  (let [path (.getToken history) 
-        path-tokens (tokenize path)]
+     (reset! use-url-fragment use-fragment)
+     (reset! route-base-path base-path)
+     (reset! current-state root-state)
 
-    (reset! current-state root-state)
+     (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
 
-    (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
+     (gev/listen history "navigate"
+                 (fn [e]
+                   (so/log "navigate" history e)
+                   (when (.-isNavigation e)
+                     (reroute (fix-token (.-token e)))
+                     )))
 
-    (gev/listen history "navigate"
-                (fn [e]
-                  (when (.-isNavigation e)
-                    (reroute (str "/" (.-token e)))
-                    )))
-
-    (push-routes path-tokens)
-    ))
+     (let [token (fix-token (.getToken history))]
+       (so/log "initial token" token)
+       (reroute token))
+     ))
