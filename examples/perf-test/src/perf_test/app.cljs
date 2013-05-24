@@ -42,7 +42,7 @@
                             ::item :value)
           ])
 
-  :dom-events [[:click "button.go"] run-cycle
+  :dom/events [[:click "button.go"] run-cycle
                [:click "button.anim"] run-animation])
 
 (defn ^:export go []

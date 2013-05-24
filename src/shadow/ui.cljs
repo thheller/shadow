@@ -12,7 +12,7 @@
 
 ;; behavior
 (def update-on-change
-  [:input-change (fn [obj attr value]
+  [:input/change (fn [obj attr value]
                    (so/update! obj assoc-in attr value))])
 
 (defprotocol IInputType
@@ -61,33 +61,36 @@
 
 ;;; INPUT
 
-(so/define-event :input-change "when a validated input is changed"
+(so/define-event :input/change "when an input is changed and its value was validated"
   [[:attr "the attr arg"]
    [:value "the new value"]
    [:input "the dom input?"]])
 
-(so/define-event :input-blur "when the user leaves an input field, should follow :input-decoded unlike :input-change will also fire when input wasnt changed"
+(so/define-event :input/blur "when the user leaves an input field, should follow :input/validated unlike :input/change will also fire when input wasnt changed"
   [[:attr "the attr arg"]
    [:value "the new value"]
    [:input "the dom input?"]])
 
-(so/define-event :input-enter "when enter was pressed and the value validated"
+(so/define-event :input/enter "when enter was pressed and the value validated"
   [[:attr "attr"]
    [:value "value"]
    [:input "input"]])
 
-(so/define-event :input-validated "whenever the input was validated to be correct"
+(so/define-event :input/validated "whenever the input was validated to be correct"
   [[:attr "attr eg. [:some :attr]"]
    [:value "the value"]
    [:dom-input "the dom node the value came from"]])
 
-(so/define-event :input-error "whenever the input was validated to be falsy"
+(so/define-event :input/error "whenever the input was validated to be falsy"
   [[:attr "attr eg. [:some :attr]"]
-   [:msg "the error msg"] 
+   [:msg "the error msg"]
    [:dom-input "the dom node the string value came from"]])
 
-(so/define-event :force-validation "trigger a validation and thus resulting in input-validated/input-error"
+(so/define-event :input/force-validation "trigger a validation and thus resulting in input-validated/input-error"
   [])
+
+(so/define-event :input/set-values "update the dom with new values"
+  [:new-values "a map containing the values to set, each input should check for its own attribute and only update if included in the map, otherwise ignore the event"])
 
 
 (defn index-of [items check-fn]
@@ -122,16 +125,16 @@
 
 (defn do-validation
   "validate attr with value decoded from string-value via input
-   notifies obj with [:input-error attr error-msg input] when an error is found
-   notifies obj with [:input-validated attr value input] when no error is found"
+   notifies obj with [:input/error attr error-msg input] when an error is found
+   notifies obj with [:input/validated attr value input] when no error is found"
   [{:keys [a parent] :as input} value string-value]
   (let [get-error-fn (so/get-type-attr parent :input-get-error never-has-errors)]
     (if-let [msg (get-error-fn parent a string-value value)]
       (do
-        (so/notify! parent :input-error a msg input)
+        (so/notify! parent :input/error a msg input)
         false)
       (do
-        (so/notify! parent :input-validated a value input)
+        (so/notify! parent :input/validated a value input)
         true))
       ))
 
@@ -140,7 +143,7 @@
         value (-decode input-type sval)]
     (do-validation this value sval)
     ))
-                             
+
 (defn dom-select-grouped
   ([obj attr type options-key]
      (dom-select-grouped obj attr type options-key {}))
@@ -190,7 +193,7 @@
                   (let [sv (dom/get-value select)
                         value (-decode type sv)]
                     (when (do-validation obj value sv)
-                      (so/notify! obj :input-change attr value select))
+                      (so/notify! obj :input/change attr value select))
                   )))
 
         select
@@ -205,18 +208,18 @@
   :dom (fn [{:keys [attrs options input-type] :as this}]
          [:select attrs (dom-select-options input-type options)])
 
-  :on [:force-validation quick-validation
-       :change-options (fn [{:keys [input-type] :as this} new-options]
-                         (let [curval (dom/get-value this)]
-                           (dom/reset this)
-                           (dom/append this (dom-select-options input-type new-options))
-                           (dom/set-value this curval)))]
+  :on [:input/force-validation quick-validation
+       :input/change-options (fn [{:keys [input-type] :as this} new-options]
+                               (let [curval (dom/get-value this)]
+                                 (dom/reset this)
+                                 (dom/append this (dom-select-options input-type new-options))
+                                 (dom/set-value this curval)))]
 
-  :dom-events [:change  (fn [{:keys [a parent input-type] :as this} ev]
+  :dom/events [:change  (fn [{:keys [a parent input-type] :as this} ev]
                           (let [sval (dom/get-value this)
                                 value (-decode input-type sval)]
                             (when (do-validation this value sval)
-                              (so/notify! parent :input-change a value this))) 
+                              (so/notify! parent :input/change a value this)))
                           )])
 
 (defn dom-select
@@ -249,7 +252,7 @@
        ;; watcher keeps both objs alive when it shouldnt
        (so/bind-change obj options-key
                        (fn [old new]
-                         (so/notify! select :change-options new)
+                         (so/notify! select :input/change-options new)
                          ))
 
        select
@@ -265,11 +268,17 @@
   :dom (fn [{:keys [attrs] :as this}]
          [:input (merge {:type "text"} attrs)])
 
-  :on [:force-validation quick-validation]
+  :on [:input/force-validation quick-validation
+       :input/set-values (fn [{:keys [a input-type] :as this} new-values]
+                           (when-let [nv (get-in new-values a)]
+                             (so/log "dom-input new value" a nv)
+                             (so/update! this assoc :v nv)
+                             (dom/set-value this (-encode input-type nv))
+                             ))]
 
-  :dom-events [:blur (fn [{:keys [input-type capture] :as this} ev]
+  :dom/events [:blur (fn [{:keys [input-type capture] :as this} ev]
                        (if (contains? capture :blur)
-                         (process-dom-input this :input-blur)
+                         (process-dom-input this :input/blur)
                          ;; special case processsing for empty fields since
                          ;; change doesnt fire if you enter an empty field
                          ;; and leave it empty (but I still want validation to fire)
@@ -279,7 +288,7 @@
                                (do-validation this value sval))))))
 
                :change (fn [this]
-                         (process-dom-input this :input-change))])
+                         (process-dom-input this :input/change))])
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
@@ -294,7 +303,7 @@
                     (-encode type init-val))
 
         input-attrs (-> attrs
-                        (dissoc :capture :bind)
+                        (dissoc :capture)
                         (assoc :value init-sval
                                :name (dom-name attr)))]
 
@@ -318,7 +327,7 @@
                          )))
 
     (dom/on input :change (fn [e]
-                            (so/notify! obj :input-change attr (dom/checked? input) input)))
+                            (so/notify! obj :input/change attr (dom/checked? input) input)))
 
     input
     ))
@@ -347,7 +356,7 @@
                             (let [sval (dom/get-value input)
                                   value (-decode type sval)]
                               (when (do-validation obj attr value sval input)
-                                (so/notify! obj :input-change attr value input)))))
+                                (so/notify! obj :input/change attr value input)))))
 
     input
     ))
@@ -409,7 +418,7 @@
              [:a nav-label]]
             )])
 
-  :dom-events [[:click "li"] (fn [this e el]
+  :dom/events [[:click "li"] (fn [this e el]
                                (doseq [t (dom/children this)]
                                  (dom/remove-class t "active"))
                                (dom/add-class el "active")

@@ -97,14 +97,14 @@
   "object descruction"
   [[:cause "cause of destruction, :parent means the parent was destroyed, :direct is default"]])
 
-(define-event :dom-init
+(define-event :dom/init
   "called after the dom was created but has not entered the document yet"
   [[:dom "the dom that was created"]])
 
-(define-event :dom-entered
+(define-event :dom/entered
   "should be called whenever a dom node is added to the document, since that
    is not in control of this library its up to you to call this
-   use (so/notify-tree! your-obj :dom-entered) to notify the node and every child you created"
+   use (so/notify-tree! your-obj :dom/entered) to notify the node and every child you created"
   [])
 
 (define-event :updated
@@ -234,7 +234,7 @@
     ;; no messin arround when parent is dead
     (dom/remove (::dom this))
     ;; custom removals are allowed when removing direct
-    (if-let [custom-remove (get-type-attr this :dom-remove)]
+    (if-let [custom-remove (get-type-attr this :dom/remove)]
       (custom-remove this (::dom this))
       (dom/remove (::dom this))
       )))
@@ -262,7 +262,7 @@
 
 (defn bind-dom-events [oref dom dom-events]
   (when-not (zero? (rem (count dom-events) 2))
-    (throw (ex-info "object defined invalid event" {:object-type (-type oref) :dom-events dom-events})))
+    (throw (ex-info "object defined invalid event" {:object-type (-type oref) :dom/events dom-events})))
 
   (doseq [[ev handler :as ev-def] (partition 2 dom-events)]
     (when (nil? handler)
@@ -413,7 +413,7 @@
                     (let [ov (get-in old attr)
                           nv (get-in new attr)]
                       (when-not (= ov nv)
-                        (callback ov nv)))))) 
+                        (callback ov nv))))))
      ))
 
 (defn in-dom? [node]
@@ -429,7 +429,7 @@
   (when (in-dom? parent)
     ;; only notify when the parent is already in the dom
     ;; not sure if its useful to keep track of this inside the object itself?
-    (notify-tree! child :dom-entered)))
+    (notify-tree! child :dom/entered)))
 
 (defn create [type args]
   (when-not (contains? @object-defs type)
@@ -458,14 +458,14 @@
 
     (notify! oref :init)
 
-    (let [dom-events (:dom-events odef [])]
+    (let [dom-events (:dom/events odef [])]
       (if-let [dom (:dom args)]
         ;; attach+events
         (do
           (dom/set-data dom :oid oid)
           (bind-dom-events oref dom dom-events)
           (update! oref assoc ::dom dom)
-          (notify! oref :dom-init dom))
+          (notify! oref :dom/init dom))
         ;; create+events
         (when-let [dom-fn (:dom odef)]
           (let [dom (dom/build (dom-fn oref))]
@@ -474,7 +474,7 @@
 
             (update! oref assoc ::dom dom)
             (bind-dom-events oref dom dom-events)
-            (notify! oref :dom-init dom)
+            (notify! oref :dom/init dom)
             ))))
 
     (when-let [watches (:watch odef)]
@@ -608,7 +608,7 @@
                                 (let [new-obj (make-item-fn [nkey nval])]
                                   (dom/replace-node cn new-obj)
                                   (destroy! cc)
-                                  (notify-tree! new-obj :dom-entered))
+                                  (notify-tree! new-obj :dom/entered))
                                 ;;(update! cc assoc item-key nval ::coll-key nkey)
                                 ;;(notify! cc :bind-child-update ckey nkey cval nval)
                                 )))
@@ -628,7 +628,7 @@
   (let [c (count coll)]
     (cond
      (= 0 key) (vec (rest coll))
-     (= (dec c) key) (vec (butlast coll)) 
+     (= (dec c) key) (vec (butlast coll))
      :else ;; item in teh middle
      (vec (concat (subvec coll 0 key)
                   (subvec coll (inc key) c))))

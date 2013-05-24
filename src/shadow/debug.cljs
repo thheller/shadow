@@ -34,7 +34,7 @@
 
   :expandable-events []
 
-  :dom-events [[:click ".title"] expandable/toggle])
+  :dom/events [[:click ".title"] expandable/toggle])
 
 
 (so/define ::debug-popup
@@ -48,7 +48,7 @@
                              this :items
                              ::item :item)])
 
-  :dom-events [[:click "a.close"] popup/close
+  :dom/events [[:click "a.close"] popup/close
                [:click "a.refresh"] #(so/update! % assoc :items (vals @so/instances))]
   )
 
@@ -61,7 +61,7 @@
 
   :keyboard ["shift-escape" #(list-objects %)]
 
-  :dom-events [])
+  :dom/events [])
 
 (defn ^:export activate! []
   (let [bar (so/create ::debug-bar {})]

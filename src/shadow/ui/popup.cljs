@@ -16,7 +16,7 @@
 (so/define ::popup-backdrop
   :on []
   :dom (fn [this] [:div#backdrop])
-  :dom-events [:click #(close (:parent %))]
+  :dom/events [:click #(close (:parent %))]
 
   :keyboard ["escape" #(close (:parent %))])
 
@@ -50,7 +50,7 @@
 
     (dom/append backdrop)
     (dom/append popup)
-    (so/notify-tree! popup :dom-entered)
+    (so/notify-tree! popup :dom/entered)
     (so/notify! popup :popup-open)
     popup
     ))
