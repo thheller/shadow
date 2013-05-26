@@ -334,6 +334,9 @@
 (defn get-size [el]
   (size->clj (gs/getSize (dom-node el))))
 
+(defn get-height [el]
+  (-> el get-size :h))
+
 (defn get-viewport-size []
   (size->clj (dom/getViewportSize)))
 

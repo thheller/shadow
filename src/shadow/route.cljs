@@ -25,12 +25,26 @@
   (if (= token "") "/" token))
 
 
-(so/define-event :route-activate "sent when routing is complete" [])
+(so/define-event :route/activate "sent when routing is complete" [])
+
+(so/define-event :route/begin "sent before routing is started"
+  [[:path "the path we will route to"]])
+
+(so/define-event :route/done "sent when routing is done"
+  [[:state "the new top dog"]])
+
+(so/define-event :route/pop "sent when a route is left, followed immediantly by destroy!" [])
+
+(so/define-event :route/push "sent to the parent before the new child is made master"
+  [[:new-child "the new child"]])
+
+
 
 (defn pop-current []
   (let [current @current-state
         parent (so/get-parent current)]
     (so/log "exit-route" current parent)
+    (so/notify! current :route/pop)
     (so/destroy! current)
     (reset! current-state parent)))
 
@@ -66,6 +80,7 @@
       (throw (str "route " (pr-str current) " does not have a .route-children in its dom, please add")))
 
     (so/dom-enter child-container child)
+    (so/notify! current-state :route/push child)
     (reset! current-state child)))
 
 (defn push-routes [tokens]
@@ -108,6 +123,7 @@
   (= 0 (.indexOf a b)))
 
 (defn reroute [path]
+  (so/notify-up! @current-state :route/begin path)
   
   (loop [current-path (get-current-path)]
     (so/log "reroute" {:path path
@@ -125,7 +141,9 @@
          (pop-current)
          (recur (get-current-path))))))
 
-  (so/notify! @current-state :route-activate))
+  (so/notify-up! @current-state :route/done @current-state)
+  (so/notify! @current-state :route/activate)
+  )
 
 ;; called from the app itself, should maybe do some extra checks?
 (defn navigate! [path]

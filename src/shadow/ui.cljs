@@ -37,7 +37,7 @@
     placeholder-node
     ))
 
-(defn int-type []
+(def int-type
   (reify IInputType
     (-decode [this value]
       (when (re-find #"^\d+$" value)
@@ -45,14 +45,14 @@
     (-encode [this val]
       (str val))))
 
-(defn text-type []
+(def text-type
   (reify IInputType
     (-decode [this string]
       (.trim string))
     (-encode [this val]
       (str val))))
 
-(defn keyword-type []
+(def keyword-type
   (reify IInputType
     (-decode [this string]
       (keyword (.substring string 1)))
@@ -90,7 +90,10 @@
   [])
 
 (so/define-event :input/set-values "update the dom with new values"
-  [:new-values "a map containing the values to set, each input should check for its own attribute and only update if included in the map, otherwise ignore the event"])
+  [[:new-values "a map containing the values to set, each input should check for its own attribute and only update if included in the map, otherwise ignore the event"]])
+
+(so/define-event :input/set-options "update the dom with new options, probably only interesting for select boxes"
+  [[:new-options "a map containing the options to set, each input should check for its own attribute and only update if included in the map, otherwise ignore the event"]])
 
 
 (defn index-of [items check-fn]
@@ -128,7 +131,7 @@
    notifies obj with [:input/error attr error-msg input] when an error is found
    notifies obj with [:input/validated attr value input] when no error is found"
   [{:keys [a parent] :as input} value string-value]
-  (let [get-error-fn (so/get-type-attr parent :input-get-error never-has-errors)]
+  (let [get-error-fn (so/get-type-attr parent :input/get-error never-has-errors)]
     (if-let [msg (get-error-fn parent a string-value value)]
       (do
         (so/notify! parent :input/error a msg input)
@@ -144,76 +147,54 @@
     (do-validation this value sval)
     ))
 
-(defn dom-select-grouped
-  ([obj attr type options-key]
-     (dom-select-grouped obj attr type options-key {}))
-  ([obj attr type options-key select-attrs]
-      (when-not (satisfies? IInputType type)
-        (throw (ex-info "dom select type must support protocol InputType" {:type type})))
 
-      ;; options-key should point to options in obj (I may want to bind to them!)
-      ;; options should be [["group label" [[value "label"]
-      ;;                                    [value "label"]]]
+(def dom-input-behavior
+  [:input/force-validation quick-validation
+   :input/set-values (fn [{:keys [a input-type] :as this} new-values]
+                       (when-let [nv (get-in new-values a)]
+                         (so/log "set-values" this a nv)
+                         (so/update! this assoc :v nv)
+                         (dom/set-value this (-encode input-type nv))
+                         ))])
 
-      (let [attr (as-path attr)
-            init-val (get-in obj attr)
-            options (get obj options-key [])
 
-            _ (when-not (vector? options)
-                (throw (ex-info "select options should be a vector" {:options options})))
+(defn dom-select-options-grouped [input-type options]
+  ;; FIXME: can you nest more than 1 lvl? never done it.
+  (for [[group-label group-options] options]
+    (if (string? group-options)
+      ;; single option
+      [:option {:value (-encode type group-label)} group-options]
+      ;; optgroup
+      [:optgroup {:label group-label}
+       (for [[value label] group-options]
+         [:option {:value (-encode type value)}
+          (str label)])])))
 
-            make-options (fn [options]
-                           ;; FIXME: this should probably do some recursive action
-                           ;; one may nest deeper than 1 lvl?
-                           (for [[group-label group-options] options]
-                             (if (string? group-options)
-                               ;; single option
-                               [:option {:value (-encode type group-label)} group-options]
-                               ;; optgroup
-                               [:optgroup {:label group-label}
-                                (for [[value label] group-options]
-                                  [:option {:value (-encode type value)
-                                            :selected (when (= init-val value) true)}
-                                   (str label)])])))
-
-            select (dom/build [:select select-attrs (make-options options)])]
-
-        (so/bind-change obj options-key
-                        (fn [_ new]
-                          (let [curval (get-in obj attr)]
-                            (so/log "options changed" curval new)
-                            (dom/reset select)
-                            (doseq [option (make-options new)]
-                              (dom/append select option))
-                            (dom/set-value select (-encode type curval)))
-                          ))
-
-        (dom/on select :change
-                (fn [ev]
-                  (let [sv (dom/get-value select)
-                        value (-decode type sv)]
-                    (when (do-validation obj value sv)
-                      (so/notify! obj :input/change attr value select))
-                  )))
-
-        select
-        )))
-
-(defn dom-select-options [input-type options]
+(defn dom-select-options-flat [input-type options]
   (for [[value label] options
         :let [label (or label value)]]
     [:option {:value (-encode input-type value)} (str label)]))
 
-(so/define ::dom-select
-  :dom (fn [{:keys [attrs options input-type] :as this}]
-         [:select attrs (dom-select-options input-type options)])
+(defn dom-select-options [{:keys [input-type group] :as this} options]
+  (if group
+    (dom-select-options-grouped input-type options)
+    (dom-select-options-flat input-type options)
+    ))
 
-  :on [:input/force-validation quick-validation
-       :input/change-options (fn [{:keys [input-type] :as this} new-options]
-                               (let [curval (dom/get-value this)]
-                                 (dom/reset this)
-                                 (dom/append this (dom-select-options input-type new-options))
-                                 (dom/set-value this curval)))]
+(so/define ::dom-select
+  :dom (fn [{:keys [attrs options] :as this}]
+         [:select attrs (dom-select-options this options)])
+
+  :behaviors [dom-input-behavior]
+
+  :on [:input/set-options (fn [{:keys [a] :as this} new-options]
+                            (when-let [nv (get-in new-options a)]
+                              (so/update! this assoc :options nv) ;; dont really need to do this?
+                              (let [curval (dom/get-value this)]
+                                (dom/reset this)
+                                (doseq [opt (dom-select-options this nv)]
+                                  (dom/append this opt))
+                                (dom/set-value this curval))))]
 
   :dom/events [:change  (fn [{:keys [a parent input-type] :as this} ev]
                           (let [sval (dom/get-value this)
@@ -223,40 +204,33 @@
                           )])
 
 (defn dom-select
-  ([obj attr type options-key]
-     (dom-select obj attr type options-key {}))
-  ([obj attr type options-key select-attrs]
+  ([obj attr type options]
+     (dom-select obj attr type options {}))
+  ([obj attr type options select-attrs]
      (when-not (satisfies? IInputType type)
        (throw (ex-info "dom select type must support protocol InputType" {:type type})))
 
-     ;; options-key should point to options in obj (I may want to bind to them!)
+     (when-not (vector? options)
+         (throw (ex-info "select options should be a vector" {:options options})))
+
      ;; options should be [[value "label"] [value "label"]
 
-     (let [attr (as-path attr)
-           init-val (get-in obj attr)
-           multiple (:multiple select-attrs)
+     (let [a (as-path attr)
+           v (get-in obj attr)]
 
-           options (get obj options-key [])
+       (so/create ::dom-select
+                  {:parent obj
+                   :attrs select-attrs
+                   :options options
+                   :a a
+                   :v v
+                   :input-type type}))))
 
-           _ (when-not (vector? options)
-               (throw (ex-info "select options should be a vector" {:options options})))
-
-           select (so/create ::dom-select
-                             {:parent obj
-                              :attrs select-attrs
-                              :options options
-                              :a attr
-                              :input-type type})]
-
-       ;; FIXME: possible leakage when the select is destroyed but the parent is not
-       ;; watcher keeps both objs alive when it shouldnt
-       (so/bind-change obj options-key
-                       (fn [old new]
-                         (so/notify! select :input/change-options new)
-                         ))
-
-       select
-       )))
+(defn dom-select-grouped
+  ([obj attr type options]
+     (dom-select obj attr type options {:group true}))
+  ([obj attr type options select-attrs]
+     (dom-select obj attr type options (assoc select-attrs :group true))))
 
 (defn process-dom-input [{:keys [parent a input-type] :as this} ev-type]
   (let [sval (dom/get-value this)
@@ -268,13 +242,7 @@
   :dom (fn [{:keys [attrs] :as this}]
          [:input (merge {:type "text"} attrs)])
 
-  :on [:input/force-validation quick-validation
-       :input/set-values (fn [{:keys [a input-type] :as this} new-values]
-                           (when-let [nv (get-in new-values a)]
-                             (so/log "dom-input new value" a nv)
-                             (so/update! this assoc :v nv)
-                             (dom/set-value this (-encode input-type nv))
-                             ))]
+  :behaviors [dom-input-behavior]
 
   :dom/events [:blur (fn [{:keys [input-type capture] :as this} ev]
                        (if (contains? capture :blur)
@@ -332,34 +300,31 @@
     input
     ))
 
-(defn dom-textarea [obj attr type attrs]
-  (so/log obj attr type attrs)
+(so/define ::dom-textarea
+  :dom (fn [{:keys [attrs v] :as this}]
+         [:textarea attrs v])
+
+  :behaviors [dom-input-behavior]
+
+  :dom-events [:change (fn [{:keys [a parent input-type] :as this} e]
+                         (let [sval (dom/get-value this)
+                               value (-decode input-type sval)]
+                           (when (do-validation this value sval)
+                             (so/notify! parent :input/change a value this))))])
+
+(defn dom-textarea
+  [obj attr type attrs]
   (when-not (satisfies? IInputType type)
     (throw (ex-info "dom input type must support protocol InputType" {:type type :attr attr :attrs attrs})))
 
-  (let [attr (as-path attr)
-        init-val (get-in obj attr)
-        init-sval (:value attrs)
-        init-sval (if (nil? init-val)
-                    ""
-                    (-encode type init-val))
-
-        input (dom/build [:textarea (dissoc attrs :bind) init-sval])]
-
-    (when (:bind attrs)
-      (so/bind-change obj attr
-                       (fn [old new]
-                         (dom/set-value input (-encode type new))
-                         )))
-
-    (dom/on input :change (fn [e]
-                            (let [sval (dom/get-value input)
-                                  value (-decode type sval)]
-                              (when (do-validation obj attr value sval input)
-                                (so/notify! obj :input/change attr value input)))))
-
-    input
-    ))
+  (let [a (as-path attr)
+        v (get-in obj a "")]
+    (so/create ::dom-textarea {:parent obj
+                               :a a
+                               :v v
+                               :input-type type
+                               :attrs attrs
+                               })))
 
 (def timeouts (atom {}))
 

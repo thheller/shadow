@@ -186,15 +186,23 @@
       (apply rfn (cons oref args)))
     ))
 
-(defn visit-tree [root-obj visit-fn]
-  (doseq [child (get-children root-obj)]
-    (visit-tree child visit-fn))
-  (visit-fn root-obj))
+(defn- do-notify-tree [current-obj ev notify-fn]
+  (doseq [child (get-children current-obj)]
+    (do-notify-tree child ev notify-fn))
+  (notify-fn current-obj))
 
 (defn notify-tree! [oref ev & args]
   (let [notify-fn (fn [obj]
                     (apply notify! obj ev args))]
-    (visit-tree oref notify-fn)))
+    (do-notify-tree oref ev notify-fn)))
+
+(def notify-down! notify-tree!)
+
+(defn notify-up! [oref ev & args]
+  (loop [current (get-parent oref)]
+    (when current
+      (apply notify! current ev args)
+      (recur (get-parent current)))))
 
 (defn update! [oref update-fn & args]
   (when-not (fn? update-fn)
