@@ -71,6 +71,10 @@
    [:value "the new value"]
    [:input "the dom input?"]])
 
+(so/define-event :input/focus "when the user focuses an input"
+  [[:attr "the attr arg"]
+   [:input "the input"]])
+
 (so/define-event :input/enter "when enter was pressed and the value validated"
   [[:attr "attr"]
    [:value "value"]
@@ -163,11 +167,11 @@
   (for [[group-label group-options] options]
     (if (string? group-options)
       ;; single option
-      [:option {:value (-encode type group-label)} group-options]
+      [:option {:value (-encode input-type group-label)} group-options]
       ;; optgroup
       [:optgroup {:label group-label}
        (for [[value label] group-options]
-         [:option {:value (-encode type value)}
+         [:option {:value (-encode input-type value)}
           (str label)])])))
 
 (defn dom-select-options-flat [input-type options]
@@ -182,7 +186,7 @@
     ))
 
 (so/define ::dom-select
-  :dom (fn [{:keys [attrs options] :as this}]
+  :dom (fn [{:keys [attrs options] :or {attrs {}} :as this}]
          [:select attrs (dom-select-options this options)])
 
   :behaviors [dom-input-behavior]
@@ -220,8 +224,9 @@
 
        (so/create ::dom-select
                   {:parent obj
-                   :attrs select-attrs
+                   :attrs (dissoc select-attrs :group)
                    :options options
+                   :group (:group select-attrs)
                    :a a
                    :v v
                    :input-type type}))))
@@ -244,18 +249,21 @@
 
   :behaviors [dom-input-behavior]
 
-  :dom/events [:blur (fn [{:keys [input-type capture] :as this} ev]
-                       (if (contains? capture :blur)
-                         (process-dom-input this :input/blur)
-                         ;; special case processsing for empty fields since
-                         ;; change doesnt fire if you enter an empty field
-                         ;; and leave it empty (but I still want validation to fire)
-                         (let [sval (dom/get-value this)]
-                           (when (= sval "")
-                             (let [value (-decode input-type sval)]
-                               (do-validation this value sval))))))
+  :dom/events [:focus (fn [{:keys [a parent] :as this} ev]
+                        (so/notify! parent :input/focus a this))
 
-               :change (fn [this]
+               :blur (fn [{:keys [parent a input-type] :as this} ev]
+                       (so/notify! parent :input/blur a this)
+
+                       ;; special case processsing for empty fields since
+                       ;; change doesnt fire if you enter an empty field
+                       ;; and leave it empty (but I still want validation to fire)
+                       (let [sval (dom/get-value this)]
+                         (when (= sval "")
+                           (let [value (-decode input-type sval)]
+                             (do-validation this value sval)))))
+
+               :change (fn [this e]
                          (process-dom-input this :input/change))])
 
 (defn dom-input [obj attr type attrs]
@@ -270,10 +278,10 @@
                     ""
                     (-encode type init-val))
 
-        input-attrs (-> attrs
-                        (dissoc :capture)
-                        (assoc :value init-sval
-                               :name (dom-name attr)))]
+        input-attrs (dissoc attrs :capture)
+        input-attrs (merge {:value init-sval
+                            :name (dom-name attr)} ;; automated naming may lead to conflicts
+                           input-attrs)]
 
     (so/create ::dom-input {:parent obj
                             :attrs input-attrs
@@ -281,24 +289,40 @@
                             :input-type type
                             :a attr})))
 
-(defn dom-checkbox [obj attr attrs]
-  (let [attr (as-path attr)
-        init-checked (get-in obj attr)
-        input (dom/build [:input (assoc attrs :type "checkbox")])]
 
-    (dom/check input init-checked)
+(so/define ::dom-checkbox
+  :dom (fn [{:keys [attrs] :as this}]
+         [:input attrs])
 
-    (when (:bind attrs)
-      (so/bind-change obj attr
-                       (fn [old new]
-                         (dom/check input new)
-                         )))
+  :dom/events [:change (fn [{:keys [a negated parent] :as this} e]
+                         (let [nv (dom/checked? this)
+                               nv (if negated (not nv) nv)]
+                           (when (do-validation this nv nv)
+                             (so/notify! parent :input/change a nv this)) 
+                           ))])
 
-    (dom/on input :change (fn [e]
-                            (so/notify! obj :input/change attr (dom/checked? input) input)))
+(defn dom-checkbox
+  ([obj attr]
+     (dom-checkbox obj attr {}))
+  ([obj attr attrs]
+     (let [a (as-path attr)
+           v (get-in obj attr false)
+           negated (:negated attrs false)
+           v (if negated
+               (not v)
+               v)
+           attrs (dissoc attrs :negated)
+           attrs (assoc attrs :type "checkbox")
+           attrs (if v
+                   (assoc attrs :checked true)
+                   attrs)]
 
-    input
-    ))
+       (so/create ::dom-checkbox {:parent obj
+                                  :a a
+                                  :negated negated
+                                  :v v
+                                  :attrs attrs})
+       )))
 
 (so/define ::dom-textarea
   :dom (fn [{:keys [attrs v] :as this}]

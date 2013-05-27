@@ -60,8 +60,13 @@
 (defn remove-class [el cls]
   (gcls/remove (dom-node el) cls))
 
-(defn toggle-class [el cls]
-  (gcls/toggle (dom-node el) cls))
+(defn toggle-class
+  ([el cls]
+     (gcls/toggle (dom-node el) cls))
+  ([el cls v]
+     (if v
+       (add-class el cls)
+       (remove-class el cls))))
 
 (defn- merge-class-string [current extra-class]
   (if (seq current)
