@@ -7,6 +7,8 @@
 (so/define-event :popup-closed "" [])
 (so/define-event :popup-open "" [])
 
+(def body (.. js/document -body))
+
 (defn close [this]
   (let [parent (so/get-parent this)]
     (so/notify! parent :popup-closing)
@@ -14,7 +16,12 @@
     (so/notify! parent :popup-closed)))
 
 (so/define ::popup-backdrop
-  :on []
+  :on [:init (fn [this]
+               (dom/add-class body "modal-visible"))
+
+       :destroy (fn [this]
+                  (dom/remove-class body "modal-visible"))]
+
   :dom (fn [this] [:div#backdrop])
   :dom/events [:click #(close (:parent %))]
 

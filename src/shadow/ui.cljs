@@ -191,13 +191,20 @@
 
   :behaviors [dom-input-behavior]
 
-  :on [:input/set-options (fn [{:keys [a] :as this} new-options]
+  :on [:dom/init (fn [{:keys [input-type v] :as this}]
+                   (dom/set-value this (-encode input-type v)))
+
+       :input/set-options (fn [{:keys [a] :as this} new-options]
                             (when-let [nv (get-in new-options a)]
                               (so/update! this assoc :options nv) ;; dont really need to do this?
                               (let [curval (dom/get-value this)]
                                 (dom/reset this)
                                 (doseq [opt (dom-select-options this nv)]
                                   (dom/append this opt))
+                                
+                                ;; FIXME: when new options are set and the current value is not available
+                                ;; in the new values chrome will display a blank value
+                                ;; probably needs fixing somehow
                                 (dom/set-value this curval))))]
 
   :dom/events [:change  (fn [{:keys [a parent input-type] :as this} ev]
@@ -220,7 +227,7 @@
      ;; options should be [[value "label"] [value "label"]
 
      (let [a (as-path attr)
-           v (get-in obj attr)]
+           v (get-in obj a)]
 
        (so/create ::dom-select
                   {:parent obj
@@ -306,7 +313,7 @@
      (dom-checkbox obj attr {}))
   ([obj attr attrs]
      (let [a (as-path attr)
-           v (get-in obj attr false)
+           v (get-in obj a false)
            negated (:negated attrs false)
            v (if negated
                (not v)
@@ -318,8 +325,8 @@
                    attrs)]
 
        (so/create ::dom-checkbox {:parent obj
-                                  :a a
                                   :negated negated
+                                  :a a
                                   :v v
                                   :attrs attrs})
        )))
@@ -367,6 +374,10 @@
              timeout-id (.setTimeout js/window timeout-fn time-ms)]
          (swap! timeouts assoc key timeout-id)
          ))))
+
+;; should be a macro at some point
+(defn with-timeout [ms callback]
+  (.setTimeout js/window callback ms))
 
 (def local-storage (.-localStorage js/window))
 

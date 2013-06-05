@@ -38,8 +38,6 @@
 (so/define-event :route/push "sent to the parent before the new child is made master"
   [[:new-child "the new child"]])
 
-
-
 (defn pop-current []
   (let [current @current-state
         parent (so/get-parent current)]
@@ -148,6 +146,11 @@
 ;; called from the app itself, should maybe do some extra checks?
 (defn navigate! [path]
   (reroute path))
+
+(defn push-state!
+  "set a new url token without doing any routing"
+  [path]
+  (.setToken history path))
 
 (defn intercept-clicks-on-a [e]
   (let [target (.-target e)]

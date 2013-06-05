@@ -1,4 +1,5 @@
 (ns shadow.object
+  (:refer-clojure :exclude (tree-seq))
   (:require [shadow.dom :as dom]
             [clojure.string :as str]
             [clojure.data :as data]))
@@ -165,6 +166,9 @@
         instances @instances]
     (vec (map #(get instances %) child-ids))
     ))
+
+(defn ^:export tree-seq [root]
+  (cljs.core/tree-seq (constantly true) get-children root))
 
 (defn get-children-of-type [oref type]
   (let [type-kw (if (keyword? type) type (-type type))]
@@ -425,7 +429,7 @@
      ))
 
 (defn in-dom? [node]
-  (loop [current node]
+  (loop [current (dom/dom-node node)]
     (if (= current js/document)
       true
       (when-let [p (.-parentNode current)]

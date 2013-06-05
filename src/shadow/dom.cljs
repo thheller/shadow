@@ -33,14 +33,12 @@
   (-to-dom [this] coll)
   )
 
-
-(def dom-node (if (js* "((typeof HTMLElement) != 'undefined')")
-                -to-dom
-                (fn dom-node-ie [el]
-                  (if (satisfies? IElement el)
-                    (-to-dom el)
-                    el))
-                ))
+(defn dom-node [el]
+  ;; FIXME: this method is called alot, how expensive is this check?
+  ;; protocols on native elements are funky
+  (if (satisfies? IElement el)
+    (-to-dom el)
+    el))
 
 (def build dom-node)
 
@@ -238,7 +236,7 @@
   ([el ev handler capture]
      (if (vector? ev)
        (on-query el (first ev) (second ev) handler)
-       (dom-listen el (name ev) handler))))
+       (dom-listen (dom-node el) (name ev) handler))))
 
 (defn by-id
   ([id el] (.getElementById (dom-node el) id))
