@@ -7,27 +7,61 @@
 (defn console-friendly [a]
   (cond
    (nil? a) "nil"
+   (keyword? a) (str a)
    (string? a) a
    (number? a) a
    (satisfies? IPrintWithWriter a) (pr-str a)
    :else a
    ))
 
-(defn log
-  ([a1]
-     (.log js/console (console-friendly a1)))
-  ([a1 a2]
-     (.log js/console (console-friendly a1) (console-friendly a2)))
-  ([a1 a2 a3]
-     (.log js/console (console-friendly a1) (console-friendly a2) (console-friendly a3)))
-  ([a1 a2 a3 a4]
-     (.log js/console (console-friendly a1) (console-friendly a2) (console-friendly a3) (console-friendly a4)))
-  ([a1 a2 a3 a4 a5]
-     (.log js/console (console-friendly a1) (console-friendly a2) (console-friendly a3) (console-friendly a4) (console-friendly a5)))
-  ([a1 a2 a3 a4 a5 a6]
-     (.log js/console (console-friendly a1) (console-friendly a2) (console-friendly a3) (console-friendly a4) (console-friendly a5) (console-friendly a6)))
-  ([a1 a2 a3 a4 a5 a6 & more]
-     (.log js/console (console-friendly a1) (console-friendly a2) (console-friendly a3) (console-friendly a4) (console-friendly a5) (console-friendly a6) "more:" (pr-str more))))
+(def console? (not (nil? (aget js/window "console"))))
+
+(if console?
+  (defn log
+    ([a1]
+       (.log js/console
+             (console-friendly a1)))
+    ([a1 a2]
+       (.log js/console
+             (console-friendly a1)
+             (console-friendly a2)))
+    ([a1 a2 a3]
+       (.log js/console
+             (console-friendly a1)
+             (console-friendly a2)
+             (console-friendly a3)))
+    ([a1 a2 a3 a4]
+       (.log js/console
+             (console-friendly a1)
+             (console-friendly a2)
+             (console-friendly a3)
+             (console-friendly a4)))
+    ([a1 a2 a3 a4 a5]
+       (.log js/console
+             (console-friendly a1)
+             (console-friendly a2)
+             (console-friendly a3)
+             (console-friendly a4)
+             (console-friendly a5)))
+    ([a1 a2 a3 a4 a5 a6]
+       (.log js/console
+             (console-friendly a1)
+             (console-friendly a2)
+             (console-friendly a3)
+             (console-friendly a4)
+             (console-friendly a5)
+             (console-friendly a6)))
+    ([a1 a2 a3 a4 a5 a6 & more]
+       (.log js/console
+             (console-friendly a1)
+             (console-friendly a2)
+             (console-friendly a3)
+             (console-friendly a4)
+             (console-friendly a5)
+             (console-friendly a6)
+             "more:"
+             (pr-str more))))
+  (defn log [& args]))
 
 (def debug log)
 
@@ -48,6 +82,10 @@
            (log "EX-INFO:" msg map cause)
            (default-ex-info msg map cause))
         ))
+
+(set! (.. js/goog -asserts -doAssertFailure_)
+      (fn [default-message default-args given-message given-args]
+        (throw (ex-info "ASSERT FAILED" {:dm default-message :da default-args :gm given-message :ga given-args}))))
 
 (def obj-id (atom 0))
 (defn next-id []
@@ -108,10 +146,6 @@
    use (so/notify-tree! your-obj :dom/entered) to notify the node and every child you created"
   [])
 
-(define-event :updated
-  "called after so/update! completed"
-  [])
-
 (define-event :bind-children-update
   "need to rethink this"
   [])
@@ -120,8 +154,7 @@
   (-id [this])
   (-type [this])
   (-data [this])
-  (-update [this update-fn] "update and notify watches")
-  (-update-direct [this update-fn] "update but dont notify watches"))
+  (-update [this update-fn] "update and notify watches"))
 
 (defn get-type [this]
   (-type this))
@@ -167,8 +200,11 @@
     (vec (map #(get instances %) child-ids))
     ))
 
-(defn ^:export tree-seq [root]
-  (cljs.core/tree-seq (constantly true) get-children root))
+(defn ^:export tree-seq
+  ([root]
+     (tree-seq root (fn [node] true)))
+  ([root branch?]
+     (cljs.core/tree-seq branch? get-children root)))
 
 (defn get-children-of-type [oref type]
   (let [type-kw (if (keyword? type) type (-type type))]
@@ -181,8 +217,11 @@
     ))
 
 (defn notify! [oref ev & args]
-  (when-not (contains? @events ev)
-    (debug "triggering undefined notifiction" (pr-str ev) " with " (pr-str args)))
+  
+  #_ (when-not (contains? @events ev)
+       (debug "triggering undefined notifiction" (pr-str ev) " with " (pr-str args)))
+
+  ;; (debug "notify!" oref ev args)
 
   (when-let [reactions-to-trigger (get-in oref [::reactions ev])]
     ;; (debug "notify!" (-id oref) (-type oref) ev reactions-to-trigger args)
@@ -216,20 +255,7 @@
         data (-data oref)
         work-fn (fn [data] (apply update-fn data args))]
     (-update oref work-fn)
-    (notify! oref :updated)
     ))
-
-(defn update-direct! [oref update-fn & args]
-  (when-not (fn? update-fn)
-    (throw (str "update-direct! expects a fn as second arg, not " (pr-str update-fn))))
-
-  (let [id (-id oref)
-        data (-data oref)
-        work-fn (fn [data] (apply update-fn data args))]
-    (-update-direct oref work-fn)
-    (notify! oref :updated)
-    ))
-
 
 (defn- set-parent! [child parent]
   (let [child-id (-id child)
@@ -285,10 +311,15 @@
                       (notify! this handler e el))
                     handler)]
       (dom/on dom ev (fn dom-event-handler [e el]
-                       (dom/ev-stop e)
+                       (when (= "A" (.-tagName el)) 
+                         ;; FIXME: thou shall not stop events at all?
+                         ;; FIXME: stops all events on A, but what except click would you use anyways?
+                         ;; <a class="wtf" href="#">something</a>
+                         ;; this just simplifies :dom/events [[:click "a.wtf"] some-fn] so some-fn doesnt have to
+                         ;; stop the event which is what you'd want 99% of the time, if you dont want to stop it
+                         ;; use the router and dont listen to click.
+                         (dom/ev-stop e))
                        (handler oref e el))))))
-
-
 
 (defn- reaction-merge [result [event handler]]
   (let [current (get result event (list))]
@@ -363,9 +394,6 @@
         ;; maybe queue all other modifications until this is finished?
         (when (alive? this)
           (handler key this old new)))))
-
-  (-update-direct [this update-fn]
-    (set! data (update-fn data)))
 
   IEquiv
   (-equiv [this other]

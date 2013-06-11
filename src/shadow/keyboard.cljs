@@ -74,7 +74,7 @@
 (defn handle-key-up [e]
   (let [key (.-keyCode e)]
     (when-not (or (contains? mod-keys key) (contains? ignore-key-events (.-nodeName (.-target e))))
-      (so/log "keyboard/handle-key-up" e (.-nodeName (.-target e)))
+      (so/log "keyboard/handle-key-up" e)
       (let [key-id (key-id-from-event e)]
         (loop [handlers @key-handlers]
           (if (empty? handlers)
@@ -118,6 +118,8 @@
     ))
 
 (defn hook! []
-  (dom/on (.-body js/document) "keyup" handle-key-up) true)
+  ;; FIXME: this is broken in IE and otherwise inefficient
+  ;;(dom/on (.-body js/document) "keyup" handle-key-up) true
+  )
 
 (hook!)

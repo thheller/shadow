@@ -1,7 +1,8 @@
 (ns shadow.ui.popup
   (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
-            [shadow.dom :as dom]))
+            [shadow.dom :as dom]
+            [shadow.ui :as ui]))
 
 (so/define-event :popup-closing "" [])
 (so/define-event :popup-closed "" [])
@@ -57,7 +58,19 @@
 
     (dom/append backdrop)
     (dom/append popup)
+
+    (dom/set-style popup {:opacity 0})
+    (dom/set-style backdrop {:opacity 0})
+
     (so/notify-tree! popup :dom/entered)
+
+    (ui/with-timeout 1
+      (fn []
+        (dom/add-class backdrop "popup-ease-in")
+        (dom/add-class popup "popup-ease-in")
+        (dom/set-style backdrop {:opacity 0.6})
+        (dom/set-style popup {:opacity 1})))
+
     (so/notify! popup :popup-open)
     popup
     ))

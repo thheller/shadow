@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [remove])
   (:require [goog.dom :as dom]
             [goog.dom.forms :as gf]
-            [goog.dom.classes :as gcls]
+            [goog.dom.classlist :as gcls]
             [goog.style :as gs]
             [clojure.string :as str]))
 
@@ -343,4 +343,12 @@
 (defn get-viewport-size []
   (size->clj (dom/getViewportSize)))
 
+(defn first-child [el]
+  (aget (.-children (dom-node el)) 0))
 
+(defn select-option-values [el]
+  (let [native (dom-node el)
+        opts (aget native "options")]
+    (areduce opts i ret []
+             (conj ret (aget opts i "value")))
+    ))

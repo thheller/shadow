@@ -48,7 +48,7 @@
 (def text-type
   (reify IInputType
     (-decode [this string]
-      (.trim string))
+      (str/trim string))
     (-encode [this val]
       (str val))))
 
@@ -127,16 +127,23 @@
                                        items))])
                  ))))
 
-(defn never-has-errors [obj field value string-value]
+(defn never-has-errors [obj field value]
   nil)
 
+(defn get-error
+  "get error message for value (nil if value is accepted)"
+  [{:keys [a parent] :as input} value]
+  (let [get-error-fn (so/get-type-attr parent :input/get-error never-has-errors)]
+    (get-error-fn parent a value)
+    ))
+
 (defn do-validation
-  "validate attr with value decoded from string-value via input
+  "validate value and notify parent
    notifies obj with [:input/error attr error-msg input] when an error is found
    notifies obj with [:input/validated attr value input] when no error is found"
-  [{:keys [a parent] :as input} value string-value]
+  [{:keys [a parent] :as input} value]
   (let [get-error-fn (so/get-type-attr parent :input/get-error never-has-errors)]
-    (if-let [msg (get-error-fn parent a string-value value)]
+    (if-let [msg (get-error input value)]
       (do
         (so/notify! parent :input/error a msg input)
         false)
@@ -148,9 +155,8 @@
 (defn quick-validation [{:keys [input-type] :as this}]
   (let [sval (dom/get-value this)
         value (-decode input-type sval)]
-    (do-validation this value sval)
+    (do-validation this value)
     ))
-
 
 (def dom-input-behavior
   [:input/force-validation quick-validation
@@ -194,23 +200,30 @@
   :on [:dom/init (fn [{:keys [input-type v] :as this}]
                    (dom/set-value this (-encode input-type v)))
 
-       :input/set-options (fn [{:keys [a] :as this} new-options]
+       :input/set-options (fn [{:keys [a input-type parent] :as this} new-options]
                             (when-let [nv (get-in new-options a)]
                               (so/update! this assoc :options nv) ;; dont really need to do this?
+
                               (let [curval (dom/get-value this)]
                                 (dom/reset this)
                                 (doseq [opt (dom-select-options this nv)]
                                   (dom/append this opt))
                                 
-                                ;; FIXME: when new options are set and the current value is not available
-                                ;; in the new values chrome will display a blank value
-                                ;; probably needs fixing somehow
-                                (dom/set-value this curval))))]
+                                (let [values (dom/select-option-values this)
+                                      value-set (set values)]
+                                  (if (and curval (contains? value-set curval)) ;; new options include all value, reselect it
+                                    (dom/set-value this curval)
+                                    ;; new options dont include old one, select first option and notify parent
+                                    ;; FIXME: what to do when options are empty? really more of an app concern?
+                                    (when-let [n-val (first values)]
+                                      (dom/set-value this n-val)
+                                      (so/notify! parent :input/change a (-decode input-type n-val) this)))
+                                  ))))]
 
   :dom/events [:change  (fn [{:keys [a parent input-type] :as this} ev]
                           (let [sval (dom/get-value this)
                                 value (-decode input-type sval)]
-                            (when (do-validation this value sval)
+                            (when (do-validation this value)
                               (so/notify! parent :input/change a value this)))
                           )])
 
@@ -247,7 +260,7 @@
 (defn process-dom-input [{:keys [parent a input-type] :as this} ev-type]
   (let [sval (dom/get-value this)
         value (-decode input-type sval)]
-    (when (do-validation this value sval)
+    (when (do-validation this value)
       (so/notify! parent ev-type a value this))))
 
 (so/define ::dom-input
@@ -256,22 +269,27 @@
 
   :behaviors [dom-input-behavior]
 
+  :on [:dom/init (fn [{:keys [v input-type] :as this}]
+                   (dom/set-value this (-encode input-type v))
+                   )]
+
   :dom/events [:focus (fn [{:keys [a parent] :as this} ev]
                         (so/notify! parent :input/focus a this))
 
-               :blur (fn [{:keys [parent a input-type] :as this} ev]
+               :blur (fn [{:keys [parent a input-type v] :as this} ev]
                        (so/notify! parent :input/blur a this)
 
-                       ;; special case processsing for empty fields since
-                       ;; change doesnt fire if you enter an empty field
-                       ;; and leave it empty (but I still want validation to fire)
-                       (let [sval (dom/get-value this)]
-                         (when (= sval "")
-                           (let [value (-decode input-type sval)]
-                             (do-validation this value sval)))))
+                       (let [sval (dom/get-value this)
+                             new-value (-decode input-type sval)]
 
-               :change (fn [this e]
-                         (process-dom-input this :input/change))])
+                         ;; FIXME: need to figure out what the best behavior is here, mostly related to validations
+                         ;; not using change event since I basically want validation on blur
+                         ;; doing it again on change is kinda pointless since we can do it here
+                         (when (do-validation this new-value)
+                           (when (not= new-value v)
+                             (so/update! this assoc :v new-value)
+                             (so/notify! parent :input/change a new-value this))
+                           )))])
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
@@ -279,22 +297,18 @@
 
   (let [attr (as-path attr)
         capture (:capture attrs #{:change})
-        init-val (get-in obj attr)
-        init-sval (:value attrs)
-        init-sval (if (nil? init-val)
-                    ""
-                    (-encode type init-val))
+        init-val (or (get-in obj attr) (:default attrs ""))
 
-        input-attrs (dissoc attrs :capture)
-        input-attrs (merge {:value init-sval
-                            :name (dom-name attr)} ;; automated naming may lead to conflicts
+        input-attrs (dissoc attrs :capture :default)
+        input-attrs (merge {:name (dom-name attr)} ;; automated naming may lead to conflicts
                            input-attrs)]
 
     (so/create ::dom-input {:parent obj
                             :attrs input-attrs
                             :capture capture
                             :input-type type
-                            :a attr})))
+                            :a attr
+                            :v init-val})))
 
 
 (so/define ::dom-checkbox
@@ -304,7 +318,7 @@
   :dom/events [:change (fn [{:keys [a negated parent] :as this} e]
                          (let [nv (dom/checked? this)
                                nv (if negated (not nv) nv)]
-                           (when (do-validation this nv nv)
+                           (when (do-validation this nv)
                              (so/notify! parent :input/change a nv this)) 
                            ))])
 
@@ -340,7 +354,7 @@
   :dom-events [:change (fn [{:keys [a parent input-type] :as this} e]
                          (let [sval (dom/get-value this)
                                value (-decode input-type sval)]
-                           (when (do-validation this value sval)
+                           (when (do-validation this value)
                              (so/notify! parent :input/change a value this))))])
 
 (defn dom-textarea
@@ -432,10 +446,4 @@
     (so/create ::navbar {:parent parent
                           :navbar pairs
                           :default default})))
-
-
-
-
-
-
 

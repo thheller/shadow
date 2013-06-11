@@ -1,5 +1,5 @@
 (ns shadow.route
-  (:import goog.history.Html5History)
+  (:import goog.History)
   (:require [clojure.data :as data]
             [goog.events :as gev]
             [shadow.dom :as dom]
@@ -10,7 +10,7 @@
 
 ;; FIXME: rewrite this, its clearly broken in some places
 
-(def history (Html5History.))
+(def history (History.))
 (def current-state (atom nil))
 
 (def route-base-path (atom nil))
@@ -166,14 +166,14 @@
   ([root-state base-path]
      (init root-state base-path false))
   ([root-state base-path use-fragment]
-     (.setUseFragment history use-fragment)
+     ;; (.setUseFragment history use-fragment)
      (.setEnabled history true)
 
      (reset! use-url-fragment use-fragment)
      (reset! route-base-path base-path)
      (reset! current-state root-state)
 
-     (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
+     ;; (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
 
      (gev/listen history "navigate"
                  (fn [e]
