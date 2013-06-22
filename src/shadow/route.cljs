@@ -13,9 +13,6 @@
 (def history (History.))
 (def current-state (atom nil))
 
-(def route-base-path (atom nil))
-(def use-url-fragment (atom false))
-
 (def current-path (atom (-> js/document
                             (.-location)
                             (.-pathname))))
@@ -41,7 +38,6 @@
 (defn pop-current []
   (let [current @current-state
         parent (so/get-parent current)]
-    (so/log "exit-route" current parent)
     (so/notify! current :route/pop)
     (so/destroy! current)
     (reset! current-state parent)))
@@ -105,7 +101,6 @@
   (let [path (if (= "/" (first path))
                (.substring path 1)
                path)]
-    (so/log "tokenize" path (.split path "/"))
     (.split path "/")
     ))
 
@@ -130,7 +125,6 @@
      true
      (if (starts-with path current-path)
        (let [new-tokens (tokenize (.substring path (count current-path)))]
-         (so/log "new-tokens" new-tokens)
          (push-routes new-tokens)
          (.setToken history path))
 
@@ -156,33 +150,23 @@
   (let [target (.-target e)]
     (when (= "A" (.-nodeName target))
       (dom/ev-stop e)
-      (reroute
-       (if @use-url-fragment 
-         (.substring (.-hash target) 1)
-         (.-pathname target)))
+      (reroute (.substring (.-hash target) 1))
       )))
 
-(defn init
-  ([root-state base-path]
-     (init root-state base-path false))
-  ([root-state base-path use-fragment]
-     ;; (.setUseFragment history use-fragment)
-     (.setEnabled history true)
+(defn init [root-state]
+  ;; (.setUseFragment history true) ;; Html5History only
+  (.setEnabled history true)
 
-     (reset! use-url-fragment use-fragment)
-     (reset! route-base-path base-path)
-     (reset! current-state root-state)
+  (reset! current-state root-state)
 
-     ;; (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
+  ;; (dom/on (dom/dom-node root-state) :click intercept-clicks-on-a)
 
-     (gev/listen history "navigate"
-                 (fn [e]
-                   (so/log "navigate" history e)
-                   (when (.-isNavigation e)
-                     (reroute (fix-token (.-token e)))
-                     )))
+  (gev/listen history "navigate"
+              (fn [e]
+                (when (.-isNavigation e)
+                  (reroute (fix-token (.-token e)))
+                  )))
 
-     (let [token (fix-token (.getToken history))]
-       (so/log "initial token" token)
-       (reroute token))
-     ))
+  (let [token (fix-token (.getToken history))]
+    (reroute token))
+  )

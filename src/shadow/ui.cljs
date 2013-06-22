@@ -315,9 +315,21 @@
   :dom (fn [{:keys [attrs] :as this}]
          [:input attrs])
 
+  :on [:input/force-validation (fn [this]
+                                 (do-validation this (:v this))) 
+
+       :input/set-values (fn [{:keys [a negated] :as this} new-values]
+                           (let [nv (get-in new-values a)]
+                             (when-not (nil? nv)
+                               (so/update! this assoc :v nv)
+                               (let [dv (if negated (not nv) nv)]
+                                 (dom/check this dv)))
+                             ))]
+
   :dom/events [:change (fn [{:keys [a negated parent] :as this} e]
                          (let [nv (dom/checked? this)
                                nv (if negated (not nv) nv)]
+                           (so/update! this assoc :v nv)
                            (when (do-validation this nv)
                              (so/notify! parent :input/change a nv this)) 
                            ))])
