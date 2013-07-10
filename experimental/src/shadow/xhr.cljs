@@ -67,3 +67,12 @@
     (-> (xhr-post req (pr-str data))
         (goog.result/transform edn-transform)
         )))
+
+(defn upload [url file & events]
+  (let [xhr (js/XMLHttpRequest.)]
+    (doseq [[ev-id ev-handler] (partition 2 events)
+            :let [target (if (= :progress ev-id) (aget xhr "upload") xhr)]]
+      (.addEventListener target (name ev-id) ev-handler))
+    (doto xhr
+      (.open "PUT" url)
+      (.send file))))

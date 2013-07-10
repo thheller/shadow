@@ -222,7 +222,7 @@
                     (try
                       (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
                       (catch js/Object e
-                        (so/log "didnt support attachEvent" el e)))
+                        (.log js/console "didnt support attachEvent" el e)))
                     )))
 
 (defn on-query [root-el ev selector handler]
@@ -327,7 +327,7 @@
   (gs/setStyle (dom-node el) (clj->js styles)))
 
 (defn get-position [el]
-  (let [pos (gs/getPosition (dom-node el))]
+  (let [pos (gs/getClientPosition (dom-node el))]
     {:x (.-x pos) :y (.-y pos)}))
 
 (defrecord Size [w h])
@@ -352,3 +352,17 @@
     (areduce opts i ret []
              (conj ret (aget opts i "value")))
     ))
+
+(defn build-url [path query-params]
+  (if (empty? query-params)
+    path
+    (str path "?" (str/join "&" (map (fn [[k v]]
+                                       (str (name k) "=" (js/encodeURIComponent (str v))))
+                                     query-params)))
+    ))
+(defn redirect
+  ([path]
+     (redirect path {}))
+  ([path query-params]
+     (aset js/document "location" "href" (build-url path query-params))
+     ))

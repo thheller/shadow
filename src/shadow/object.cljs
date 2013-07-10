@@ -674,28 +674,29 @@
                   (subvec coll (inc key) c))))
     ))
 
-(defn remove-item-from-coll [coll key]
+(defn remove-item-from-coll [coll key value]
   (cond
    (satisfies? IVector coll)
    (remove-from-vector coll key)
    (satisfies? IMap coll)
    (dissoc coll key)
    (satisfies? ISet coll)
-   (disj coll key)
+   (disj coll value)
    :else (throw "unknown coll type")
    ))
 
 (defn remove-in-parent! [oref]
   (let [parent (get-parent oref)
         key (::coll-key oref)
+        value (get oref (::coll-item-key oref))
         path (::coll-path oref)]
 
     (when-not (and key path)
       (throw (ex-info "remove-in-parent! should only be called from items created via so/bind-children" {:oref oref})))
 
-    (log "remove in parent" key path parent (get-in parent path))
-    (update! parent update-in path remove-item-from-coll key)
-    (log "after remove in parent" key path (get-in parent path))
+    (let [coll (get-in parent path)
+          new-coll (remove-item-from-coll coll key value)]
+      (notify! parent :bind/update path new-coll))
     ))
 
 (defn inspect! [oref]

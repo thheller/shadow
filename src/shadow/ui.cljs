@@ -48,14 +48,16 @@
 (def text-type
   (reify IInputType
     (-decode [this string]
-      (str/trim string))
+       (str/trim string))
     (-encode [this val]
       (str val))))
 
 (def keyword-type
   (reify IInputType
     (-decode [this string]
-      (keyword (.substring string 1)))
+      (when (and (string? string)
+                 (not= "" string))
+        (keyword (.substring string 1))))
     (-encode [this val]
       (str val))))
 
@@ -270,8 +272,22 @@
   :behaviors [dom-input-behavior]
 
   :on [:dom/init (fn [{:keys [v input-type] :as this}]
-                   (dom/set-value this (-encode input-type v))
-                   )]
+                   (dom/set-value this (-encode input-type v)))
+
+       :dom/init (fn [{:keys [a parent input-type capture] :as this}]
+                   (when (contains? capture :enter)
+                     (dom/on this :keyup
+                             (fn [e]
+                               (when (= 13 (.-keyCode e))
+                                 (let [sval (dom/get-value this)
+                                       new-value (-decode input-type sval)]
+
+                                   ;; FIXME: need to figure out what the best behavior is here, mostly related to validations
+                                   ;; not using change event since I basically want validation on blur
+                                   ;; doing it again on change is kinda pointless since we can do it here
+                                   (when (do-validation this new-value)
+                                     (so/notify! parent :input/enter a new-value this)
+                                     )))))))]
 
   :dom/events [:focus (fn [{:keys [a parent] :as this} ev]
                         (so/notify! parent :input/focus a this))
@@ -459,3 +475,20 @@
                           :navbar pairs
                           :default default})))
 
+
+(defn distinct-by
+  "Returns a lazy sequence of the (ex elements) of coll with duplicates removed"
+  {:added "1.0"
+   :static true
+   :from "clojure.core/distinct"}
+  [ex coll]
+  (let [step (fn step [xs seen]
+               (lazy-seq
+                ((fn [[f :as xs] seen]
+                   (let [fex (ex f)]
+                     (when-let [s (seq xs)]
+                       (if (contains? seen fex)
+                         (recur (rest s) seen)
+                         (cons f (step (rest s) (conj seen fex)))))))
+                 xs seen)))]
+    (step coll #{})))
