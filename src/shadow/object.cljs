@@ -601,8 +601,6 @@
 
                             (bind-change obj item-key
                                          (fn [old new]
-                                           ;; FIXME: this wont work for sets, only vec and map
-
                                            (let [parent-key (conj attr (::coll-key obj))]
                                              (log "direct child update" parent obj key parent-key new)
                                              (reset! update-children false)

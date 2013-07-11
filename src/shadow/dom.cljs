@@ -307,6 +307,22 @@
     (NativeColl. fragment)
     ))
 
+
+(defn eval-scripts
+  "given a html string, eval all <script> tags and return the html without the scripts
+   don't do this for everything, only content you trust."
+  [s]
+  (let [scripts (re-seq #"<script[^>]*?>(.+?)</script>" s)]
+
+    (doseq [[script-tag script-body] scripts]
+      (js/eval script-body))
+
+    (reduce (fn [s [script-tag script-body]]
+              (str/replace s script-tag ""))
+            s
+            scripts)
+    ))
+
 (defn str->fragment [s]
   (NativeColl. (dom/htmlToDocumentFragment s)))
 
