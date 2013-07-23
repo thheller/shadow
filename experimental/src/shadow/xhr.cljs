@@ -1,5 +1,6 @@
 (ns shadow.xhr
-  (:require [goog.result :as gresult]
+  (:require [shadow.result :as sresult]
+            [goog.result :as gresult]
             [goog.labs.net.xhr :as gxhr]
             [cljs.reader :as cr]
             [goog.uri.utils :as gutils]
@@ -33,6 +34,8 @@
      (not= -1 (.indexOf content-type "json"))
      (json-transform (.-responseText req))
      (not= -1 (.indexOf content-type "text/html"))
+     (.-responseText req)
+     (not= -1 (.indexOf content-type "javascript"))
      (.-responseText req)
      :else
      (throw (ex-info "unsupported content-type" {:req req :content-type content-type}))

@@ -4,7 +4,10 @@
             [goog.dom.forms :as gf]
             [goog.dom.classlist :as gcls]
             [goog.style :as gs]
+            [goog.style.transition :as gst]
             [clojure.string :as str]))
+
+(def transition-supported? (gst/isSupported))
 
 (defprotocol IElement
   (-to-dom [this]))
@@ -282,6 +285,9 @@
 (defn set-attr [el key value]
   (dom/setProperties (dom-node el) (clj->js {key value})))
 
+(defn del-attr [el key]
+  (.removeAttribute (dom-node el) (name key)))
+
 ;; dont ever include a script including this in <head>!
 (def data (if (.. js/document -body -dataset)
             (fn data-dataset [el key]
@@ -382,3 +388,7 @@
   ([path query-params]
      (aset js/document "location" "href" (build-url path query-params))
      ))
+
+(defn tag-name [el]
+  (let [dom (dom-node el)]
+    (.-tagName dom)))

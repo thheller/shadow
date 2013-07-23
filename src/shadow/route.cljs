@@ -35,6 +35,9 @@
 (so/define-event :route/push "sent to the parent before the new child is made master"
   [[:new-child "the new child"]])
 
+(so/define-event :route/navigate "direct routing"
+  [[:route "new route value"]])
+
 (defn pop-current []
   (let [current @current-state
         parent (so/get-parent current)]
@@ -146,6 +149,14 @@
   [path]
   (.setToken history path))
 
+(defn replace-state!
+  "replace current url in history"
+  [path]
+  (.replaceToken history path))
+
+(defn get-state []
+  (.getToken history))
+
 (defn intercept-clicks-on-a [e]
   (let [target (.-target e)]
     (when (= "A" (.-nodeName target))
@@ -168,5 +179,22 @@
                   )))
 
   (let [token (fix-token (.getToken history))]
-    (reroute token))
-  )
+    (reroute token)))
+
+
+(defn register [handler]
+  (.setEnabled history true)
+
+  (let [key (gev/listen history "navigate"
+                        (fn [e]
+                          (when (.-isNavigation e)
+                            (let [new-token (.-token e)]
+                              (so/log "navigate event" handler new-token)
+                              (so/notify! handler :route/navigate new-token)))))]
+
+    (so/add-reaction! handler :destroy
+                      (fn [this]
+                        (gev/unlistenByKey key)
+                        ))
+
+    key))

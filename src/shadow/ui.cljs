@@ -291,6 +291,16 @@
 
   :dom/events [:focus (fn [{:keys [a parent] :as this} ev]
                         (so/notify! parent :input/focus a this))
+               
+               :change (fn [{:keys [parent a input-type v] :as this} ev]
+                         (let [sval (dom/get-value this)
+                               new-value (-decode input-type sval)]
+
+                           (when (do-validation this new-value)
+                             (when (not= new-value v)
+                               (so/update! this assoc :v new-value)
+                               (so/notify! parent :input/change a new-value this))
+                             )))
 
                :blur (fn [{:keys [parent a input-type v] :as this} ev]
                        (so/notify! parent :input/blur a this)
@@ -298,14 +308,8 @@
                        (let [sval (dom/get-value this)
                              new-value (-decode input-type sval)]
 
-                         ;; FIXME: need to figure out what the best behavior is here, mostly related to validations
-                         ;; not using change event since I basically want validation on blur
-                         ;; doing it again on change is kinda pointless since we can do it here
-                         (when (do-validation this new-value)
-                           (when (not= new-value v)
-                             (so/update! this assoc :v new-value)
-                             (so/notify! parent :input/change a new-value this))
-                           )))])
+                         ;; FIXME: validates once on change and once on blur
+                         (do-validation this new-value)))])
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
@@ -492,3 +496,26 @@
                          (cons f (step (rest s) (conj seen fex)))))))
                  xs seen)))]
     (step coll #{})))
+
+(defn self-destruct
+  "behavior to self destruct objects on click or timeout
+
+   useful for notifications and such
+   
+   Example:
+   (so/define ::my-object
+     :dom (fn ...)
+     :behaviors [(ui/self-destruct 3000)])
+  
+  this will so/destroy! (the default) the object 3000ms after it entered the dom"
+  ([timeout]
+     (self-destruct timeout so/destroy!))
+  ([timeout destruct-fn]
+     [:dom/entered
+      (fn [this]
+        (let [timer (ui/with-timeout timeout
+                      #(destruct-fn this))]
+          (dom/on this :click
+                  (fn [e]
+                    (.clearTimeout js/window timer)
+                    (destruct-fn this)))))]))
