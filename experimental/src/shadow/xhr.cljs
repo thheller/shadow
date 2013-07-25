@@ -7,6 +7,8 @@
             [goog.json :as gjson]
             ))
 
+;; FIXME: this whole module is a mess ...
+
 (defn- edn-transform [body]
   (cr/read-string body))
 
@@ -41,6 +43,9 @@
      (throw (ex-info "unsupported content-type" {:req req :content-type content-type}))
      )))
 
+(defn make-url [url params]
+  (gutils/appendParamsFromMap url (clj->js params)))
+
 (defn request
   ([method url]
      (request method url nil {}))
@@ -48,8 +53,10 @@
      (request method url data {}))
   ([method url data options]
       (let [req (gxhr/send (name method)
-                           url
-                           (when-not (or (nil? data) (= :GET method))
+                           (if (and (= :GET method) data)
+                             (make-url url data)
+                             url)
+                           (when-not (or (= :GET method) (nil? data))
                              (pr-str data))
                            (make-request-options (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8"))
                            )]
