@@ -16,42 +16,48 @@
 
 (def console? (not (nil? (aget js/window "console"))))
 
-(if console?
-  (defn log
-    ([a1]
+(defn log
+  ([a1]
+     (when console?
        (.log js/console
-             (console-friendly a1)))
-    ([a1 a2]
+             (console-friendly a1))))
+  ([a1 a2]
+     (when console?
        (.log js/console
              (console-friendly a1)
-             (console-friendly a2)))
-    ([a1 a2 a3]
+             (console-friendly a2))))
+  ([a1 a2 a3]
+     (when console?
        (.log js/console
              (console-friendly a1)
              (console-friendly a2)
-             (console-friendly a3)))
-    ([a1 a2 a3 a4]
+             (console-friendly a3))))
+  ([a1 a2 a3 a4]
+     (when console?
        (.log js/console
              (console-friendly a1)
              (console-friendly a2)
              (console-friendly a3)
-             (console-friendly a4)))
-    ([a1 a2 a3 a4 a5]
+             (console-friendly a4))))
+  ([a1 a2 a3 a4 a5]
+     (when console?
        (.log js/console
              (console-friendly a1)
              (console-friendly a2)
              (console-friendly a3)
              (console-friendly a4)
-             (console-friendly a5)))
-    ([a1 a2 a3 a4 a5 a6]
+             (console-friendly a5))))
+  ([a1 a2 a3 a4 a5 a6]
+     (when console?
        (.log js/console
              (console-friendly a1)
              (console-friendly a2)
              (console-friendly a3)
              (console-friendly a4)
              (console-friendly a5)
-             (console-friendly a6)))
-    ([a1 a2 a3 a4 a5 a6 & more]
+             (console-friendly a6))))
+  ([a1 a2 a3 a4 a5 a6 & more]
+     (when console?
        (.log js/console
              (console-friendly a1)
              (console-friendly a2)
@@ -60,8 +66,7 @@
              (console-friendly a5)
              (console-friendly a6)
              "more:"
-             (pr-str more))))
-  (defn log [& args]))
+             (pr-str more)))))
 
 (def debug log)
 
