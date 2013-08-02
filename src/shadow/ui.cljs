@@ -272,7 +272,27 @@
   :behaviors [dom-input-behavior]
 
   :on [:dom/init (fn [{:keys [v input-type] :as this}]
-                   (dom/set-value this (-encode input-type v)))
+                   (when v
+                     (dom/set-value this (-encode input-type v))))
+
+       ;; there is no API to figure out if a field was filled by autocomplete
+       ;; unless a value has been given previously, just take a peek
+       ;; the delay is required since the browser does not fill the value when the element enters the dom
+       ;; but does after some delay, sometimes even 250 is not enough, depends on what else is going on
+       :dom/entered (fn [{:keys [parent a v input-type] :as this}]
+                      (when (= v "")
+                        (.setTimeout
+                         js/window
+                         (fn []
+                           (let [sv (dom/get-value this)]
+                             (when (not= sv "")
+                               (let [new-value (-decode input-type sv)]
+                                 (when (do-validation this new-value)
+                                   (so/log "found autocomplete field" a)
+                                   (so/notify! parent :input/change a new-value this)
+                                   )))))
+                         250
+                         )))
 
        :dom/init (fn [{:keys [a parent input-type capture] :as this}]
                    (when (contains? capture :enter)

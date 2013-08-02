@@ -52,15 +52,18 @@
   ([method url data]
      (request method url data {}))
   ([method url data options]
-      (let [req (gxhr/send (name method)
-                           (if (and (= :GET method) data)
-                             (make-url url data)
-                             url)
-                           (when-not (or (= :GET method) (nil? data))
-                             (pr-str data))
-                           (make-request-options (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8"))
-                           )]
-        (goog.result/transform req auto-transform))))
+     (when (and (not (contains? #{:GET :DELETE} method)) (nil? data))
+       (throw (ex-info "request needs data" {:method method :url url :data data :options options})))
+
+     (let [req (gxhr/send (name method)
+                          (if (and (= :GET method) data)
+                            (make-url url data)
+                            url)
+                          (when-not (or (= :GET method) (nil? data))
+                            (pr-str data))
+                          (make-request-options (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8"))
+                          )]
+       (goog.result/transform req auto-transform))))
 
 
 (defn get-edn [url]
