@@ -67,8 +67,8 @@
   (cond
    (nil? s) nil
    (number? s) (Size. s s)
-   (vector? c) (Size. (nth c 0) (nth c 1))
-   (map? c) (Size. (:x s) (:y s))
+   (vector? s) (Size. (nth s 0) (nth s 1))
+   (map? s) (Size. (:w s) (:h s))
    :else
    (throw (ex-info "invalid size" {:size s}))))
 
@@ -88,6 +88,7 @@
    offsets is x or [x y] (ints)
    margins is x [y x] [top right bottom left] (ints, css-style margin, padding)
    overflow is a set of overflow-bits keywords
+   preferred-size is w [w h] {:w _ :h _}, single number is turned into [w w]
    viewport nil or see margins"
   [anchor
    anchor-corner
