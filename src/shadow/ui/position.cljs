@@ -1,5 +1,6 @@
 (ns shadow.ui.position
   (:import goog.math.Box
+           goog.math.Size
            goog.math.Coordinate)
   (:require [shadow.dom :as dom]
             [goog.positioning :as pos]
@@ -62,6 +63,15 @@
    (throw (ex-info "invalid box" {:box c}))
    ))
 
+(defn ->size [s]
+  (cond
+   (nil? s) nil
+   (number? s) (Size. s s)
+   (vector? c) (Size. (nth c 0) (nth c 1))
+   (map? c) (Size. (:x s) (:y s))
+   :else
+   (throw (ex-info "invalid size" {:size s}))))
+
 (defn ->overflow [keys]
   (reduce
    (fn [v key]
@@ -96,4 +106,5 @@
    (->coordinate offsets)
    (->box margins)
    (->overflow overflow)
+   (->size preferred-size)
    (->box viewport)))
