@@ -196,5 +196,9 @@
                       (fn [this]
                         (gev/unlistenByKey key)
                         ))
+    
+    (let [token (.getToken history)]
+      (when-not (= token "")
+        (so/notify! handler :route/navigate token)))
 
     key))
