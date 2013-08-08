@@ -37,6 +37,8 @@
      (json-transform (.-responseText req))
      (not= -1 (.indexOf content-type "text/html"))
      (.-responseText req)
+     (not= -1 (.indexOf content-type "text/plain"))
+     (.-responseText req)
      (not= -1 (.indexOf content-type "javascript"))
      (.-responseText req)
      :else
