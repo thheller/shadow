@@ -198,7 +198,6 @@
                         ))
     
     (let [token (.getToken history)]
-      (when-not (= token "")
-        (so/notify! handler :route/navigate token)))
+      (so/notify! handler :route/navigate token))
 
     key))

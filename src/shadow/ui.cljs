@@ -164,7 +164,6 @@
   [:input/force-validation quick-validation
    :input/set-values (fn [{:keys [a input-type] :as this} new-values]
                        (when-let [nv (get-in new-values a)]
-                         (so/log "set-values" this a nv)
                          (so/update! this assoc :v nv)
                          (dom/set-value this (-encode input-type nv))
                          ))])
@@ -237,7 +236,7 @@
        (throw (ex-info "dom select type must support protocol InputType" {:type type})))
 
      (when-not (vector? options)
-         (throw (ex-info "select options should be a vector" {:options options})))
+         (throw (ex-info "select options should be a vector" {:parent obj :attr attr :options options})))
 
      ;; options should be [[value "label"] [value "label"]
 
@@ -271,7 +270,7 @@
 
   :behaviors [dom-input-behavior]
 
-  :on [:dom/init (fn [{:keys [v input-type] :as this}]
+  :on [:dom/init (fn [{:keys [a v input-type] :as this}]
                    (when v
                      (dom/set-value this (-encode input-type v))))
 
@@ -280,19 +279,20 @@
        ;; the delay is required since the browser does not fill the value when the element enters the dom
        ;; but does after some delay, sometimes even 250 is not enough, depends on what else is going on
        :dom/entered (fn [{:keys [parent a v input-type] :as this}]
-                      (when (= v "")
-                        (.setTimeout
-                         js/window
-                         (fn []
-                           (let [sv (dom/get-value this)]
-                             (when (not= sv "")
-                               (let [new-value (-decode input-type sv)]
-                                 (when (do-validation this new-value)
-                                   (so/log "found autocomplete field" a)
-                                   (so/notify! parent :input/change a new-value this)
-                                   )))))
-                         250
-                         )))
+                      (when-not (= "off" (dom/attr this :autocomplete)) ;; fucking autocomplete, we need a standard for this stuff
+                        (when (= v "")
+                          (.setTimeout
+                           js/window
+                           (fn []
+                             (let [sv (dom/get-value this)]
+                               (when (not= sv "")
+                                 (let [new-value (-decode input-type sv)]
+                                   (when (do-validation this new-value)
+                                     (so/log "found autocomplete field" parent a)
+                                     (so/notify! parent :input/change a new-value this)
+                                     )))))
+                           250
+                           ))))
 
        :dom/init (fn [{:keys [a parent input-type capture] :as this}]
                    (when (contains? capture :enter)
