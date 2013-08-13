@@ -1,5 +1,5 @@
 (ns shadow.dom
-  (:refer-clojure :exclude [remove])
+  (:refer-clojure :exclude [remove contains?])
   (:require [goog.dom :as dom]
             [goog.dom.forms :as gf]
             [goog.dom.classlist :as gcls]
@@ -54,6 +54,14 @@
       (set! (.-cancelBubble e) true)
       (set! (.-returnValue e) false)))
   true)
+
+(defn contains?
+  "check wether a parent node (or the document) contains the child"
+  ([el]
+     (dom/contains js/document (dom-node el)))
+  ([parent el]
+     (dom/contains (dom-node parent) (dom-node el))))
+
 
 (defn add-class [el cls]
   (gcls/add (dom-node el) cls))

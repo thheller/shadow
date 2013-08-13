@@ -461,17 +461,9 @@
                         (callback ov nv))))))
      ))
 
-(defn in-dom? [node]
-  (loop [current (dom/dom-node node)]
-    (if (= current js/document)
-      true
-      (when-let [p (.-parentNode current)]
-        (recur p)
-        ))))
-
 (defn dom-enter [parent child]
   (dom/append parent child)
-  (when (in-dom? parent)
+  (when (dom/contains? parent)
     ;; only notify when the parent is already in the dom
     ;; not sure if its useful to keep track of this inside the object itself?
     (notify-tree! child :dom/entered)))
