@@ -201,11 +201,11 @@
   :on [:dom/init (fn [{:keys [input-type v] :as this}]
                    (dom/set-value this (-encode input-type v)))
 
-       :input/set-options (fn [{:keys [a input-type parent] :as this} new-options]
+       :input/set-options (fn [{:keys [a input-type parent v] :as this} new-options]
                             (when-let [nv (get-in new-options a)]
                               (so/update! this assoc :options nv) ;; dont really need to do this?
 
-                              (let [curval (dom/get-value this)]
+                              (let [curval (-encode input-type v)]
                                 (dom/reset this)
                                 (doseq [opt (dom-select-options this nv)]
                                   (dom/append this opt))
