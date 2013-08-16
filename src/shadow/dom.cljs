@@ -400,3 +400,7 @@
 (defn tag-name [el]
   (let [dom (dom-node el)]
     (.-tagName dom)))
+
+(defn insert-after [ref new]
+  (dom/insertSiblingAfter (dom-node new)
+                          (dom-node ref)))
