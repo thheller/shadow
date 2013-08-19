@@ -77,6 +77,10 @@
        (add-class el cls)
        (remove-class el cls))))
 
+
+(defn has-class? [el cls]
+  (gcls/contains (dom-node el) cls))
+
 (defn- merge-class-string [current extra-class]
   (if (seq current)
     (str current " " extra-class)
