@@ -39,7 +39,7 @@
 
 (so/define ::debug-popup
   :dom (fn [this]
-         [:div#debug-items.popup.fullscreen
+         [:div#debug-items {:style "z-index: 65000; position: fixed; top: 0px; left: 0px; right: 0px; bottom: 0px;"}
           [:a.close {:href "#"} "close"]
           [:h2 "Object Snapshot [Items #" (so/bind-simple this :items count) "]"]
           [:p
@@ -61,7 +61,7 @@
 
   :keyboard ["shift-escape" #(list-objects %)]
 
-  :dom/events [])
+  :dom/events [:click list-objects])
 
 (defn ^:export activate! []
   (let [bar (so/create ::debug-bar {})]

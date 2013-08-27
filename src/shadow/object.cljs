@@ -180,10 +180,8 @@
 
 (defn ^:export get-from-dom [dom]
   (let [oid (dom/data dom :oid)]
-    (when-not oid
-      (throw (ex-info "get-from-dom only works on nodes created via so/create" {:dom dom})))
-
-    (get-by-id (js/parseInt oid))
+    (when oid
+      (get-by-id (js/parseInt oid)))
     ))
 
 (defn ^:export get-parent [oref]
@@ -198,6 +196,10 @@
         parent
         (recur (:parent parent))))))
 
+
+;; FIXME: would be nice if these were in dom order
+;; but since children arent always direct dom children
+;; this would be kinda costly I guess
 (defn ^:export get-children [parent]
   (let [parent-id (-id parent)
         child-ids (get @instance-children parent-id [])
@@ -215,6 +217,23 @@
   (let [type-kw (if (keyword? type) type (-type type))]
     (filter #(= type-kw (-type %)) (get-children oref))
     ))
+
+(defn get-siblings
+  "basically (get-children (:parent this))"
+  [{:keys [parent] :as oref}]
+  (when-not parent
+    (throw (ex-info "object has no parent, thus has no siblings" {:oref oref})))
+
+  (get-children parent))
+
+(defn get-siblings-of-type 
+  "returns set of all siblings of a common type"
+  ([oref]
+     (get-siblings-of-type oref oref))
+  ([oref type]
+     (let [type-kw (if (keyword? type) type (-type type))]
+       (filter #(= type-kw (-type %)) (get-siblings oref))
+       )))
 
 (defn get-collection-item [oref]
   (let [item-key (::coll-item-key oref)]
@@ -327,6 +346,9 @@
                        (handler oref e el))))))
 
 (defn- reaction-merge [result [event handler]]
+  (when-not (and event handler)
+    (throw (ex-info "invalid reaction" {:event event :handler handler})))
+
   (let [current (get result event (list))]
     (assoc result event (conj current handler))))
 
@@ -677,7 +699,7 @@
    (dissoc coll key)
    (satisfies? ISet coll)
    (disj coll value)
-   :else (throw "unknown coll type")
+   :else (throw (ex-info "unknown coll type" {:coll coll :key key :value value}))
    ))
 
 (defn remove-in-parent! [oref]

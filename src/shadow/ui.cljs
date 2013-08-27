@@ -403,7 +403,7 @@
 
   :behaviors [dom-input-behavior]
 
-  :dom-events [:change (fn [{:keys [a parent input-type] :as this} e]
+  :dom/events [:change (fn [{:keys [a parent input-type] :as this} e]
                          (let [sval (dom/get-value this)
                                value (-decode input-type sval)]
                            (when (do-validation this value)
@@ -416,6 +416,7 @@
 
   (let [a (as-path attr)
         v (get-in obj a "")]
+    (so/log "dom-textarea" a v)
     (so/create ::dom-textarea {:parent obj
                                :a a
                                :v v
