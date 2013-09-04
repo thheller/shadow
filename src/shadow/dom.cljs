@@ -184,6 +184,9 @@
     (if (keyword? this)
       (make-dom-node [this])
       (.createTextNode js/document this)))
+  
+  ;;Keyword
+  ;; (-to-dom [this] (make-dom-node [this]))
 
   number
   (-to-dom [this]
@@ -231,8 +234,11 @@
 
 (def dom-listen (if (.-addEventListener js/document)
                   (fn dom-listen-good [el ev handler]
-                    (.addEventListener el ev (fn [e]
-                                               (handler e el))))
+                    (.addEventListener el
+                                       ev
+                                       (fn [e] (handler e el))
+                                       false ;; ancient browsers want 3 args
+                                       ))
                   (fn dom-listen-ie [el ev handler]
                     (try
                       (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
