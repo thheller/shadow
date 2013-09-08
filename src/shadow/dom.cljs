@@ -324,6 +324,9 @@
 (defn set-html [node text]
   (set! (.-innerHTML (dom-node node)) text))
 
+(defn get-html [node]
+  (.-innerHTML (dom-node node)))
+
 (defn fragment [& nodes]
   (let [fragment (.createDocumentFragment js/document)]
     (doseq [node nodes]
@@ -406,6 +409,7 @@
   ([path query-params]
      (aset js/document "location" "href" (build-url path query-params))
      ))
+
 
 (defn tag-name [el]
   (let [dom (dom-node el)]
