@@ -17,12 +17,18 @@
 (defn run-script-tags [module-name]
   (doseq [script (dom/query (str "script[type=\"shadow/run\"][data-module=\"" module-name "\"]"))
           :let [init-fn (dom/data script :fn)
+                dom-ref (dom/data script :ref) 
                 args (dom/get-html script)
                 args (when (and args (not= "" args))
-                       (reader/read-string args))]]
+                       (reader/read-string args))
+                args (condp = dom-ref
+                       "none" args
+                       "parent" (cons (dom/get-parent script) args)
+                       "previous-sibling" (cons (dom/get-previous-sibling script) args)
+                       "next-sibling" (cons (dom/get-next-sibling script) args)
+                       (throw (ex-info "script tag with invalid dom ref" {:dom-ref dom-ref :init-fn init-fn :script script})))]]
 
     (run-init-function init-fn args) 
-    (dom/set-data script :success "true")
     ))
 
 (defn ^:export module-ready [module-name]

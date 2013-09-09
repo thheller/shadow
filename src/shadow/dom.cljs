@@ -418,3 +418,14 @@
 (defn insert-after [ref new]
   (dom/insertSiblingAfter (dom-node new)
                           (dom-node ref)))
+
+
+(defn get-parent [el]
+  (dom/getParentElement (dom-node el)))
+
+
+(defn get-next-sibling [el]
+  (dom/getNextElementSibling (dom-node el)))
+
+(defn get-previous-sibling [el]
+  (dom/getPreviousElementSibling (dom-node el)))
