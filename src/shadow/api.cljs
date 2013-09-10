@@ -23,6 +23,7 @@
                        (reader/read-string args))
                 args (condp = dom-ref
                        "none" args
+                       "self" (cons script args)
                        "parent" (cons (dom/get-parent script) args)
                        "previous-sibling" (cons (dom/get-previous-sibling script) args)
                        "next-sibling" (cons (dom/get-next-sibling script) args)
