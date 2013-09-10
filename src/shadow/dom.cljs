@@ -5,6 +5,7 @@
             [goog.dom.classlist :as gcls]
             [goog.style :as gs]
             [goog.style.transition :as gst]
+            [goog.string :as gstr]
             [clojure.string :as str]))
 
 (def transition-supported? (gst/isSupported))
@@ -307,19 +308,21 @@
   (.removeAttribute (dom-node el) (name key)))
 
 ;; dont ever include a script including this in <head>!
-(def data (if (.. js/document -body -dataset)
-            (fn data-dataset [el key]
-              (aget (-> el dom-node .-dataset) (name key)))
-            (fn data-get-attribute [el key]
-              (.getAttribute (dom-node el) (str "data-" (name key)))) ;; fallback
-            ))
+(def data
+  (if (.. js/document -body -dataset)
+    (fn data-dataset [el key]
+      (aget (-> el dom-node .-dataset) (gstr/toCamelCase (name key))))
+    (fn data-get-attribute [el key]
+      (.getAttribute (dom-node el) (str "data-" (name key)))) ;; fallback
+    ))
 
-(def set-data (if (.. js/document -body -dataset)
-                (fn set-data-dataset [el key value]
-                  (aset (-> el dom-node .-dataset) (name key) (str value)))
-                (fn set-data-set-attribute [el key value]
-                  (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
-                ))
+(def set-data 
+  (if (.. js/document -body -dataset)
+    (fn set-data-dataset [el key value]
+      (aset (-> el dom-node .-dataset) (gstr/toCamelCase (name key)) (str value)))
+    (fn set-data-set-attribute [el key value]
+      (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
+    ))
 
 (defn set-html [node text]
   (set! (.-innerHTML (dom-node node)) text))
