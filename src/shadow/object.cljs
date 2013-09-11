@@ -360,6 +360,24 @@
 
   (reduce reaction-merge result (reverse (partition 2 behavior))))
 
+
+(defn- merge-behaviors [result behavior]
+  (cond
+   (vector? behavior)
+   (update-in result [::reactions] merge-reactions behavior)
+
+   (map? behavior)
+   (-> result
+       ;; FIXME: there might be more keys to merge, need some kind of merge logic definition
+       (update-in [::reactions] merge-reactions (:on behavior []))
+       (update-in [:dom/events] (fn [default]
+                                  (-> default
+                                      (concat (:dom/events behavior []))
+                                      (vec)))))
+   :else
+   (throw (ex-info "behavior not understood" {:behavior behavior}))
+   ))
+
 (defn define [id & args]
   (when-not (even? (count args))
     (throw (str "invalid object definition " (str id) " args: "(pr-str args))))
@@ -369,12 +387,13 @@
   (let [odef (apply hash-map args)
 
         reactions (merge-reactions {} (:on odef []))
-        reactions (reduce merge-reactions reactions (reverse (:behaviors odef [])))
+
+        ;;      reactions (reduce merge-reactions reactions (reverse (:behaviors odef [])))
 
         odef (assoc odef
                ::id id
-               ::reactions reactions
-               )]
+               ::reactions reactions)
+        odef (reduce merge-behaviors odef (reverse (:behaviors odef [])))]
 
     (swap! object-defs assoc id odef)))
 
