@@ -166,11 +166,15 @@
 
 (defn get-type-attr
   ([oref key]
-     (let [type-id (if (keyword? oref) oref (-type oref))]
-       (get-in @object-defs [type-id key])))
+     (if (nil? oref)
+       nil
+       (let [type-id (if (keyword? oref) oref (-type oref))]
+         (get-in @object-defs [type-id key]))))
   ([oref key default]
-     (let [type-id (if (keyword? oref) oref (-type oref))]
-       (get-in @object-defs [type-id key] default))))
+     (if (nil? oref)
+       default
+       (let [type-id (if (keyword? oref) oref (-type oref))]
+         (get-in @object-defs [type-id key] default)))))
 
 (defn ^:export get-dom [oref]
   (::dom oref))
