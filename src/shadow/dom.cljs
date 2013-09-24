@@ -422,6 +422,9 @@
   (dom/insertSiblingAfter (dom-node new)
                           (dom-node ref)))
 
+(defn insert-before [ref new]
+  (dom/insertSiblingBefore (dom-node new)
+                           (dom-node ref)))
 
 (defn get-parent [el]
   (dom/getParentElement (dom-node el)))
