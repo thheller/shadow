@@ -121,7 +121,7 @@
 (defn create-dom-node [tag-def props]
   (let [[tag-name tag-id tag-classes] (parse-tag tag-def)]
     (when tag-id
-      (set! (.-id props) tag-id))
+      (aset props "id" tag-id))
 
     (when tag-classes
       (aset props "class" (merge-class-string (aget props "class") tag-classes)))

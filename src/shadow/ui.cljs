@@ -115,6 +115,11 @@
 (defn dom-name [attr]
   (str/join "." (map name attr)))
 
+;; should be a macro at some point
+(defn with-timeout [ms callback]
+  (.setTimeout js/window callback ms))
+
+
 ;; http://zilence.net/sj.gif
 (defn group-select-options
   "transforms a list of maps into [[group-key [[value-key label] [value-key label]]] ...]"
@@ -397,6 +402,54 @@
                                   :attrs attrs})
        )))
 
+(so/define ::dom-radio
+  ;; [:input {:type "radio" :checked true}] doesnt work for some reason
+  ;; dom pretends to be checked but isn't displayed as such
+  ;; no idea why its behaving this way, only works when selected WITH timeout
+  ;; otherwise its not displayed as checked
+
+  :dom (fn [{:keys [attrs] :as this}]
+         [:input (dissoc attrs :checked)])
+
+  :on [:dom/init (fn [{:keys [attrs] :as this}]
+                   (when (:checked attrs)
+                     (with-timeout 1 #(dom/check this true)) 
+                     ))
+
+       :input/force-validation (fn [this]
+                                 (do-validation this (:v this))) 
+
+       :input/set-values (fn [{:keys [a v negated] :as this} new-values]
+                           (let [nv (get-in new-values a)]
+                             (dom/check this (= nv v))
+                             ))]
+
+  :dom/events [:change (fn [{:keys [a v parent] :as this} e]
+                         (when (dom/checked? this)
+                           (when (do-validation this v)
+                             (so/notify! parent :input/change a v this))) 
+                         )])
+
+(defn dom-radio
+  ([obj attr input-type v]
+     (dom-radio obj attr input-type v {}))
+  ([obj attr input-type v attrs]
+     (let [a (as-path attr)
+           cv (get-in obj a false)
+           attrs (assoc attrs
+                   :type "radio"
+                   :name (dom-name a))
+           attrs (if (= cv v)
+                   (assoc attrs :checked true)
+                   attrs)]
+       
+       (so/log "dom-radio" a v cv attrs)
+
+       (so/create ::dom-radio {:parent obj
+                               :a a
+                               :v v
+                               :attrs attrs}))))
+
 (so/define ::dom-textarea
   :dom (fn [{:keys [attrs v] :as this}]
          [:textarea attrs v])
@@ -441,10 +494,6 @@
              timeout-id (.setTimeout js/window timeout-fn time-ms)]
          (swap! timeouts assoc key timeout-id)
          ))))
-
-;; should be a macro at some point
-(defn with-timeout [ms callback]
-  (.setTimeout js/window callback ms))
 
 (def local-storage (.-localStorage js/window))
 
