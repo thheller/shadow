@@ -13,6 +13,9 @@
 (defprotocol IElement
   (-to-dom [this]))
 
+(defprotocol SVGElement
+  (-to-svg [this]))
+
 (defn- lazy-native-coll-seq [coll idx]
   (when (< idx (.-length coll))
     (lazy-seq (cons (aget coll idx)
@@ -119,28 +122,29 @@
 
 
 (defn create-dom-node [tag-def props]
-  (let [[tag-name tag-id tag-classes] (parse-tag tag-def)]
+  (let [props (clj->js props)
+        [tag-name tag-id tag-classes] (parse-tag tag-def)]
     (when tag-id
       (aset props "id" tag-id))
 
     (when tag-classes
       (aset props "class" (merge-class-string (aget props "class") tag-classes)))
-
+    
     (dom/createDom tag-name props)
     ))
 
-(defn destructure-node [[nn np & nc :as node]]
+(defn destructure-node
+  [create-fn [nn np & nc :as node]]
   (when-not (keyword? nn)
     (throw (ex-info "invalid dom node" {:node node})))
 
   (cond
    (and (nil? np) (nil? nc)) ;; [:div.something]
-   [(create-dom-node nn (js-obj)) '()]
+   [(create-fn nn {}) '()]
    (map? np) ;; [:div.something {:some "attr"}]
-   [(create-dom-node nn (clj->js np)) nc]
+   [(create-fn nn np) nc]
    :else ;; [:div.something "content" "more-content"]
-   [(create-dom-node nn (js-obj)) (conj nc np)]))
-
+   [(create-fn nn {}) (conj nc np)]))
 
 ;; restore sanity!
 
@@ -167,7 +171,7 @@
       )))
 
 (defn make-dom-node [structure]
-  (let [[node node-children] (destructure-node structure)]
+  (let [[node node-children] (destructure-node create-dom-node structure)]
 
     (doseq [child-struct node-children]
       (let [children (dom-node child-struct)]
@@ -406,13 +410,13 @@
                                        (str (name k) "=" (js/encodeURIComponent (str v))))
                                      query-params)))
     ))
+
 (defn redirect
   ([path]
      (redirect path {}))
   ([path query-params]
      (aset js/document "location" "href" (build-url path query-params))
      ))
-
 
 (defn tag-name [el]
   (let [dom (dom-node el)]
@@ -435,3 +439,54 @@
 
 (defn get-previous-sibling [el]
   (dom/getPreviousElementSibling (dom-node el)))
+
+
+
+(defn create-svg-node [tag-def props]
+  (let [[tag-name tag-id tag-classes] (parse-tag tag-def)]
+    (let [el (.createElementNS js/document "http://www.w3.org/2000/svg" tag-name)]
+      (when tag-id
+        (.setAttribute el "id" tag-id))
+
+      (when tag-classes
+        (.setAttribute el "class" (merge-class-string (:class props) tag-classes)))
+    
+      (doseq [[k v] props]
+        (.setAttribute el (name k) v))
+      el
+      )))
+
+(defn make-svg-node [structure]
+  (let [[node node-children] (destructure-node create-svg-node structure)]
+
+    (doseq [child-struct node-children]
+      (let [children (-to-svg child-struct)]
+        (if (seq? children)
+          (doseq [child children]
+            (when child
+              (.appendChild node child)))
+          (.appendChild node children))))
+    node))
+
+(extend-protocol SVGElement
+  string
+  (-to-svg [this]
+    (if (keyword? this)
+      (make-svg-node [this])
+      (throw (ex-info "strings cannot be in svgs" {:this this}))))
+  
+  PersistentVector
+  (-to-svg [this]
+    (make-svg-node this))
+
+  LazySeq
+  (-to-svg [this]
+    (map -to-svg this))
+
+  nil
+  (-to-svg [_] nil))
+
+;; FIXME: could autodetect svg elements but that would mean checking
+;; if tag == :svg for every node created in dom-node, that kinda sucks
+(defn svg [attrs & children]
+  (-to-svg (vec (concat [:svg attrs] children))))
