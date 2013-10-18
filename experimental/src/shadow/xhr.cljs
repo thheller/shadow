@@ -57,13 +57,17 @@
      (when (and (not (contains? #{:GET :DELETE} method)) (nil? data))
        (throw (ex-info "request needs data" {:method method :url url :data data :options options})))
 
-     (let [req (gxhr/send (name method)
+     (let [body? (not (or (= :GET method) (nil? data)))
+           req (gxhr/send (name method)
                           (if (and (= :GET method) data)
                             (make-url url data)
                             url)
-                          (when-not (or (= :GET method) (nil? data))
+                          (when body?
                             (pr-str data))
-                          (make-request-options (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8"))
+                          (make-request-options
+                           (if body?
+                             (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8")
+                             options))
                           )]
        (goog.result/transform req auto-transform))))
 
