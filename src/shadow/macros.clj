@@ -103,9 +103,8 @@
   ;; if more than 1 result pair, combine and wait for all, otherwise just wait for the one
   (if (= 2 (count wait-let))
     (let [[value result] wait-let]
-      `(goog.result/waitOnSuccess ~result (fn [~value]
-                                            ~@body
-                                            )))
+      `(xhr/result-wait-on-success ~result (fn [~value] ~@body)))
+
     ;; this really needs a rewrite, first macro ever sure is ugly now
     (let [results (reduce2 #(conj %1 [%2 (gensym)] %3) [] wait-let)
           result-let (reduce2 (fn [result [_ key] value]
@@ -121,14 +120,12 @@
                              []
                              results)]
       `(let [~@result-let
-             combo# (goog.result/combine ~@result-names)]
-         (goog.result/waitOnSuccess
+             combo# (xhr/result-combine ~@result-names)]
+         (xhr/result-wait-on-success
           combo#
           (fn [dummy#]
             (let [~@value-let]
-              ~@body))))
-      )))
-
+              ~@body)))))))
 
 (defn parse-tag [spec]
   (let [spec (name spec)

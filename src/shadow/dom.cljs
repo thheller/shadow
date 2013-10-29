@@ -186,12 +186,10 @@
 (extend-protocol IElement
   string
   (-to-dom [this]
-    (if (keyword? this)
-      (make-dom-node [this])
-      (.createTextNode js/document this)))
+    (.createTextNode js/document this))
   
-  ;;Keyword
-  ;; (-to-dom [this] (make-dom-node [this]))
+  Keyword
+  (-to-dom [this] (make-dom-node [this]))
 
   number
   (-to-dom [this]

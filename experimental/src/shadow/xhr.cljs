@@ -1,11 +1,32 @@
 (ns shadow.xhr
-  (:require [shadow.result :as sresult]
-            [goog.result :as gresult]
+  (:require [goog.result :as gresult]
             [goog.labs.net.xhr :as gxhr]
             [cljs.reader :as cr]
             [goog.uri.utils :as gutils]
             [goog.json :as gjson]
             ))
+
+(defn result-chain [res handler]
+  (gresult/chain res handler))
+
+(defn result-combine [& results]
+  (apply gresult/combine results))
+
+(defn result-wait-on-success [res callback]
+  (gresult/waitOnSuccess res callback))
+
+(defn result-success? [res]
+  (= (js/goog.result.Result.State.SUCCESS)
+     (.getState res)))
+
+(defn result-value [res]
+  (.getValue res))
+
+(defn result-immediate [value]
+  (gresult/successfulResult value))
+
+(defn result-error [res callback]
+  (gresult/waitOnError res callback))
 
 ;; FIXME: this whole module is a mess ...
 
@@ -69,7 +90,7 @@
                              (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8")
                              options))
                           )]
-       (goog.result/transform req auto-transform))))
+       (gresult/transform req auto-transform))))
 
 
 (defn get-edn [url]
@@ -84,7 +105,7 @@
   (let [req (if (map? req) req {:url req})
         req (assoc-in req [:headers "Content-Type"] "text-edn")]
     (-> (xhr-post req (pr-str data))
-        (goog.result/transform edn-transform)
+        (gresult/transform edn-transform)
         )))
 
 (defn upload [url file & events]

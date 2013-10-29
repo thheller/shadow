@@ -383,6 +383,8 @@
    ))
 
 (defn define [id & args]
+  (when-not (keyword? id)
+    (throw (ex-info "object id needs to be a keyword" {:id id :args args})))
   (when-not (even? (count args))
     (throw (str "invalid object definition " (str id) " args: "(pr-str args))))
   (when (contains? @object-defs id)
