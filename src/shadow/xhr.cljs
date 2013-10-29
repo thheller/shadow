@@ -16,8 +16,7 @@
   (gresult/waitOnSuccess res callback))
 
 (defn result-success? [res]
-  (= (js/goog.result.Result.State.SUCCESS)
-     (.getState res)))
+  (= js/goog.result.Result.State.SUCCESS (.getState res)))
 
 (defn result-value [res]
   (.getValue res))
