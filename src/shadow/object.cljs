@@ -390,18 +390,22 @@
   (when (contains? @object-defs id)
     (throw (str "object already defined " id)))
 
-  (let [odef (apply hash-map args)
+  (try
+    (let [odef (apply hash-map args)
 
-        reactions (merge-reactions {} (:on odef []))
+          reactions (merge-reactions {} (:on odef []))
 
-        ;;      reactions (reduce merge-reactions reactions (reverse (:behaviors odef [])))
+          ;;      reactions (reduce merge-reactions reactions (reverse (:behaviors odef [])))
 
-        odef (assoc odef
-               ::id id
-               ::reactions reactions)
-        odef (reduce merge-behaviors odef (reverse (:behaviors odef [])))]
+          odef (assoc odef
+                 ::id id
+                 ::reactions reactions)
+          odef (reduce merge-behaviors odef (reverse (:behaviors odef [])))]
 
-    (swap! object-defs assoc id odef)))
+      (swap! object-defs assoc id odef)
+      odef)
+    (catch js/Object e
+      (throw (ex-info "failed to define object" {:id id :args args})))))
 
 
 (defn- merge-defaults [data type]
