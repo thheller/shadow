@@ -43,9 +43,12 @@
 (defn dom-node [el]
   ;; FIXME: this method is called alot, how expensive is this check?
   ;; protocols on native elements are funky
-  (if (satisfies? IElement el)
-    (-to-dom ^not-native el)
-    el))
+  (cond
+   (nil? el) nil
+   (satisfies? IElement el) (-to-dom ^not-native el)
+   (string? el) (.createTextNode js/document el)
+   (number? el) (.createTextNode js/document (str el))
+   :else el))
 
 (def build dom-node)
 
@@ -184,16 +187,8 @@
     node))
 
 (extend-protocol IElement
-  string
-  (-to-dom [this]
-    (.createTextNode js/document this))
-  
   Keyword
   (-to-dom [this] (make-dom-node [this]))
-
-  number
-  (-to-dom [this]
-    (.createTextNode js/document (str this)))
 
   PersistentVector
   (-to-dom [this]
@@ -203,12 +198,8 @@
   (-to-dom [this]
     (map -to-dom this))
 
-  js/Text
-  (-to-dom [this] this)
-
   nil
-  (-to-dom [_] nil)
-  )
+  (-to-dom [_] nil))
 
 (when (js* "((typeof HTMLElement) != 'undefined')")
   (extend-protocol IElement
