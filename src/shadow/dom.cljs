@@ -44,7 +44,7 @@
   ;; FIXME: this method is called alot, how expensive is this check?
   ;; protocols on native elements are funky
   (if (satisfies? IElement el)
-    (-to-dom el)
+    (-to-dom ^not-native el)
     el))
 
 (def build dom-node)
@@ -57,7 +57,7 @@
     (do
       (set! (.-cancelBubble e) true)
       (set! (.-returnValue e) false)))
-  true)
+  e)
 
 (defn contains?
   "check wether a parent node (or the document) contains the child"
@@ -235,13 +235,10 @@
   ([sel] (NativeColl. (.querySelectorAll js/document sel)))
   ([sel root] (NativeColl. (.querySelectorAll (dom-node root) sel))))
 
+;; private, use on
 (def dom-listen (if (.-addEventListener js/document)
                   (fn dom-listen-good [el ev handler]
-                    (.addEventListener el
-                                       ev
-                                       (fn [e] (handler e el))
-                                       false ;; ancient browsers want 3 args
-                                       ))
+                    (.addEventListener el ev handler false))
                   (fn dom-listen-ie [el ev handler]
                     (try
                       (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
@@ -249,10 +246,19 @@
                         (.log js/console "didnt support attachEvent" el e)))
                     )))
 
+;; private, only works if you used dom-listen since on wrap the event handler
+(def dom-listen-remove (if (.-removeEventListener js/document)
+                         (fn dom-listen-remove-good [el ev handler]
+                           (.removeEventListener el ev handler false))
+                         (fn dom-listen-remove-ie [el ev handler]
+                           (.detachEvent el (str "on" ev) handler))
+                         ))
+;; // private
+
 (defn on-query [root-el ev selector handler]
   (doseq [el (query selector root-el)]
-    (dom-listen el (name ev) handler)
-    ))
+    (let [handler (fn [e] (handler e el))]
+      (dom-listen el (name ev) handler))))
 
 (defn on
   ([el ev handler]
@@ -260,7 +266,12 @@
   ([el ev handler capture]
      (if (vector? ev)
        (on-query el (first ev) (second ev) handler)
-       (dom-listen (dom-node el) (name ev) handler))))
+       (let [handler (fn [e] (handler e el))]
+         (dom-listen (dom-node el) (name ev) handler)))))
+
+;; only work when used with dom-listen, on will wrap the handler so you can't remove it
+(defn remove-event-handler [el ev handler]
+  (dom-listen-remove (dom-node el) (name ev) handler))
 
 (defn by-id
   ([id el] (.getElementById (dom-node el) id))
@@ -373,6 +384,13 @@
 
 (defn set-style [el styles]
   (gs/setStyle (dom-node el) (clj->js styles)))
+
+(defn remove-style [el style]
+  (.removeProperty (.-style el) (name style)))
+
+(defn remove-styles [el style-keys]
+  (doseq [it style-keys]
+    (remove-style el it)))
 
 (defn get-position [el]
   (let [pos (gs/getClientPosition (dom-node el))]
