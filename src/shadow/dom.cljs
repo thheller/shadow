@@ -196,10 +196,7 @@
 
   LazySeq
   (-to-dom [this]
-    (map -to-dom this))
-
-  nil
-  (-to-dom [_] nil))
+    (map -to-dom this)))
 
 (when (js* "((typeof HTMLElement) != 'undefined')")
   (extend-protocol IElement
