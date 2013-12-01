@@ -5,12 +5,12 @@
   []
   `(shadow.api/ns-ready ~(str *ns*)))
 
-(defmacro log [& args]
+(defmacro ^{:js-require 'shadow.object} log
+  [& args]
   `(.log js/console ~@(for [arg args]
                         `(shadow.object/console-friendly ~arg))))
 
-(defmacro
-  ^{:js-require 'shadow.xhr} wait
+(defmacro ^{:js-require 'shadow.xhr} wait
   [wait-let & body]
   ;; if more than 1 result pair, combine and wait for all, otherwise just wait for the one
   (if (= 2 (count wait-let))
