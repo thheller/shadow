@@ -56,9 +56,10 @@
 
   ;; module finished loading, run all associated script tags
   ;; eg. <script type="shadow/run" data-module="something" data-fn="my_ns.some_fn">args data (pr-str args) on server</script>
-  (doseq [script (dom/query (str "script[type=\"shadow/run\"][data-module=\"" module-name "\"]"))]
-    (run-script-tag script)
-    ))
+  (comment
+    (doseq [script (dom/query (str "script[type=\"shadow/run\"][data-module=\"" module-name "\"]"))]
+      (run-script-tag script)
+      )))
 
 (defn ^:export ns-ready [ns-name]
   (so/log "ns-ready" ns-name)

@@ -1,123 +1,167 @@
 (ns shadow.animate
   (:require-macros [cljs.core.async.macros :refer (go)])
   (:require [shadow.dom :as dom]
+            [shadow.object :as so]
             [clojure.string :as str]
-            [cljs.core.async :refer (timeout)]))
+            [cljs.core.async :refer (timeout)]
+            [goog.dom.vendor :as vendor]))
 
-(defprotocol TransitionDefinition
-  (-transition-attr [this])
-  (-transition-from [this])
-  (-transition-to [this])
-  (-transition-toggle? [this] "should return true if the attribute is not to be transitioned")
-  (-transition-timing [this] "ease, ease-in, cubic-bezier, ...")
-  (-transition-delay [this] "delay until transition starts"))
+;; not actually sure a protocol is any help here, just a map of maps would work too
+;; started with a different approach, dunno if there are any drawbacks to keeping this
+(defprotocol Animation
+  (-animate-from [this] "return a map of {attr initial-value}")
+  (-animate-to [this] "return a map of {attr target-value}")
+  (-animate-toggles [this] "return a map of {attr target-value}")
+  (-animate-timings [this] "return a map of {attr timing-function}")
+  (-animate-delays [this] "return a map of {attr transition-delay}"))
 
-(extend-protocol TransitionDefinition
-  PersistentVector
-  (-transition-attr [this] (nth this 0))
-  (-transition-from [this] (nth this 1))
-  (-transition-to [this] (nth this 2))
-  (-transition-toggle? [this] (= 3 (count this)))
-  (-transition-timing [this] (nth this 3))
-  (-transition-delay [this] (get this 4 0)))
+(defn- transition-string [duration adef]
+  (let [timings (-animate-timings adef)
+        delays (-animate-delays adef)]
+    (->> timings
+         (map (fn [[attr timing]]
+                (str (name attr)
+                     " "
+                     duration "ms"
+                     " "
+                     timing 
+                     (let [delay (get delays attr)]
+                       (when (and delay (pos? delay))
+                         (str " " delay "ms"))))))
+         (str/join ", "))))
 
-(defn- transition-string [duration attrs]
-  (->> attrs
-       (map (fn [tdef]
-              (str (name (-transition-attr tdef))
-                   " "
-                   duration "ms"
-                   " "
-                   (-transition-timing tdef)
-                   (let [delay (-transition-delay tdef)]
-                     (when (pos? delay)
-                       (str " " delay "ms"))))))
-       (str/join ", ")))
+(defn start [duration elements]
+  (let [items (for [[el adef] elements]
+                (do (when-not (satisfies? Animation adef)
+                      (throw (ex-info "invalid animation" {:el el :animation adef})))
+                    (let [from (-animate-from adef)
+                          to (-animate-to adef)
+                          toggles (-animate-toggles adef)
+                          transitions (remove -animate-toggle? attrs)]
+                      {:el el
+                       :from from 
+                       :to to
+                       :toggles toggles
+                       :transition (transition-string duration adef)})))
 
-(defn- transition-values [state-fn defs]
-  (reduce (fn [styles tdef]
-            (assoc styles (-transition-attr tdef) (state-fn tdef)))
-          {}
-          defs))
-
-(defn transition
-  "define a transition of elements, can be used to combine transitions on multiple elements
-   returns a channel you can <! to wait till its finished
-
-   transitions are defined via TransitionDefinition protocol, vectors by default
-   eg. simple vectors [attr-to-transition from to timing-function]
-                     [attr-to-toggle from to] ;; this will toggle the attr from to after the duration
-
-   (transition 500 {some-el [[:opacity \"0\" \"1\" \"ease-in\"]]
-                    other-el [[:display \"block\" \"none\"]})
-
-   when vectors are too confusing, use the helper functions
-   eg.
-   (transition-attr :opacity \"0\" \"1\" \"ease-in\") = [:opacity \"0\" \"1\" \"ease-in\"]
-   (toggle-attr :display \"block\" \"none\")
-
-   transition some-el opacity from 0 to 1 using ease-in and 500ms
-   toggle other-el display to none after 500ms"
-  [duration elements]
-  (let [items (for [[el attrs] elements]
-                (let [toggles (filter -transition-toggle? attrs)
-                      transitions (remove -transition-toggle? attrs)]
-                  {:el el
-                   :from (transition-values -transition-from attrs)
-                   :transition (transition-string duration transitions)
-                   :to (transition-values -transition-to transitions)
-                   :toggle (transition-values -transition-to toggles)}))]
-    (go (doseq [{:keys [el from]} items]
-          (dom/set-style el from))
+        ;; steps
+        set-animate-from #(doseq [{:keys [el from]} items]
+                            (dom/set-style el from))
+        set-animate-to #(doseq [{:keys [el to transition]} items]
+                          (let [to (assoc to :transition transition)]
+                            (dom/set-style el to)))
+        set-animate-toggle #(doseq [{:keys [el toggles]} items]
+                              (dom/set-style el (assoc toggles :transition nil)))]
+    (go (set-animate-from) 
         (<! (timeout 0)) ;; give dom a chance to apply styles
-        (doseq [{:keys [el to transition]} items]
-          (dom/set-style el (assoc to
-                              :transition transition)))
+        (set-animate-to)
         (<! (timeout duration))
-        (doseq [{:keys [el transition toggle]} items]
-          (dom/set-style el (assoc toggle :transition nil)))
+        (set-animate-toggle)
         :done
         )))
 
-(defn transition-attr
+;; transitions
+
+(defn transition
+  "transition the given attr from -> to using timing function and delay
+   timing defaults to ease, delay to 0"
   ([attr from to]
-     (transition-attr attr from to "ease" 0))
+     (transition attr from to "ease" 0))
   ([attr from to timing]
-     (transition-attr attr from to timing 0))
+     (transition attr from to timing 0))
   ([attr from to timing delay]
-     (reify TransitionDefinition
-       (-transition-attr [_] attr)
-       (-transition-from [_] from)
-       (-transition-to [_] to)
-       (-transition-toggle? [_] false)
-       (-transition-timing [_] timing)
-       (-transition-delay [_] delay)
+     (reify Animation
+       (-animate-from [_] {attr from})
+       (-animate-to [_] {attr to})
+       (-animate-toggles [_] {})
+       (-animate-timings [_] {attr timing})
+       (-animate-delays [_] {attr delay})
        )))
 
-(defn toggle-attr [attr from to]
-  (reify TransitionDefinition
-    (-transition-attr [_] attr)
-    (-transition-to [_] to)
-    (-transition-from [_] from)
-    (-transition-toggle? [_] true)
-    (-transition-timing [_] (throw (ex-info "should not be called" {})))
-    (-transition-delay [_] (throw (ex-info "toggles cant be delayed" {})))))
+(defn toggle [attr from to]
+  (reify Animation
+    (-animate-to [_] {})
+    (-animate-from [_] {attr from})
+    (-animate-toggles [_] {attr to})
+    (-animate-timings [_] {})
+    (-animate-delays [_] {})))
+
+(defn set-attr
+  "set attr to value when the animation starts"
+  [attr value]
+  (reify Animation
+    (-animate-to [_] {})
+    (-animate-from [_] {attr value})
+    (-animate-toggles [_] {})
+    (-animate-timings [_] {})
+    (-animate-delays [_] {})))
+
+(defn delete-attr
+  "use to remove a given attribute style when the animation is finished
+   usually only needed to remove attributes we no longer need since they are probably
+   inherited and we only used for previous transitions"
+  [attr]
+  (reify Animation
+    (-animate-to [_] {})
+    (-animate-from [_] {})
+    (-animate-toggles [_] {attr nil})
+    (-animate-timings [_] {})
+    (-animate-delays [_] {})))
+
+(defn combine [& transitions]
+  (loop [to {}
+         from {}
+         toggles {}
+         timings {}
+         delays {}
+         transitions transitions]
+    (if-let [adef (first transitions)]
+      ;; TODO: should check for conflicts and throw!
+      ;; can't combine transitions on the same attribute
+      (recur (merge to (-animate-to adef))
+             (merge from (-animate-from adef))
+             (merge toggles (-animate-toggles adef))
+             (merge timings (-animate-timings adef))
+             (merge delays (-animate-delays adef))
+             (rest transitions))
+      ;; return combined transition
+      (reify Animation
+        (-animate-from [_] from)
+        (-animate-to [_] to)
+        (-animate-toggles [_] toggles)
+        (-animate-timings [_] timings)
+        (-animate-delays [_] delays)))))
 
 ;; common transitions
 (defn fade-in
   ([] (fade-in "ease-in"))
   ([timing-function]
-     (transition-attr :opacity "0" "1" timing-function)
+     (transition :opacity "0" "1" timing-function)
      ))
 
 (defn fade-out
   ([] (fade-in "ease-out"))
   ([timing-function]
-     (transition-attr :opacity "1" "0" timing-function)
+     (transition :opacity "1" "0" timing-function)
      ))
+
+(def vendor-prefix (vendor/getVendorPrefix))
+;; the transition part for transform is still vendor prefixed! css3 ...
+(def vendor-transform (keyword (str vendor-prefix "-transform")))
+
+(defn translate-y
+  ([from to timing]
+     (translate-y from to timing 0))
+  ([from to timing delay]
+     (reify Animation
+       (-animate-from [_] {:transform (str "translateY(" from ")")})
+       (-animate-to [_] {:transform (str "translateY(" to ")")})
+       (-animate-timings [_] {vendor-transform timing})
+       (-animate-toggles [_] {})
+       (-animate-delays [_] {vendor-transform delay}))))
 
 (comment
   "combined transitions, will unblock when all completed"
-  (go (<! (transition 500 {some-el [(fade-in)]
-                           other-el [[:display "none" "block"]]
-                           more-el [[:height "0px" "100px" "ease"]]}))))
+  (go (<! (anim/start 500 {some-el (fade-in)
+                           other-el (toggle :display "none" "block")
+                           more-el (transition :height "0px" "100px" "ease")}))))
