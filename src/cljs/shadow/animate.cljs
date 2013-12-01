@@ -9,7 +9,8 @@
   (-transition-from [this])
   (-transition-to [this])
   (-transition-toggle? [this] "should return true if the attribute is not to be transitioned")
-  (-transition-timing [this] "should return nil if its just a toggle"))
+  (-transition-timing [this] "ease, ease-in, cubic-bezier, ...")
+  (-transition-delay [this] "delay until transition starts"))
 
 (extend-protocol TransitionDefinition
   PersistentVector
@@ -17,12 +18,20 @@
   (-transition-from [this] (nth this 1))
   (-transition-to [this] (nth this 2))
   (-transition-toggle? [this] (= 3 (count this)))
-  (-transition-timing [this] (nth this 3)))
+  (-transition-timing [this] (nth this 3))
+  (-transition-delay [this] (get this 4 0)))
 
 (defn- transition-string [duration attrs]
   (->> attrs
        (map (fn [tdef]
-              (str (name (-transition-attr tdef)) " " (-transition-timing tdef) " " duration "ms")))
+              (str (name (-transition-attr tdef))
+                   " "
+                   duration "ms"
+                   " "
+                   (-transition-timing tdef)
+                   (let [delay (-transition-delay tdef)]
+                     (when (pos? delay)
+                       (str " " delay "ms"))))))
        (str/join ", ")))
 
 (defn- transition-values [state-fn defs]
@@ -70,14 +79,20 @@
         :done
         )))
 
-(defn transition-attr [attr from to timing]
-  (reify TransitionDefinition
-    (-transition-attr [_] attr)
-    (-transition-from [_] from)
-    (-transition-to [_] to)
-    (-transition-toggle? [_] false)
-    (-transition-timing [_] timing)
-    ))
+(defn transition-attr
+  ([attr from to]
+     (transition-attr attr from to "ease" 0))
+  ([attr from to timing]
+     (transition-attr attr from to timing 0))
+  ([attr from to timing delay]
+     (reify TransitionDefinition
+       (-transition-attr [_] attr)
+       (-transition-from [_] from)
+       (-transition-to [_] to)
+       (-transition-toggle? [_] false)
+       (-transition-timing [_] timing)
+       (-transition-delay [_] delay)
+       )))
 
 (defn toggle-attr [attr from to]
   (reify TransitionDefinition
@@ -85,14 +100,21 @@
     (-transition-to [_] to)
     (-transition-from [_] from)
     (-transition-toggle? [_] true)
-    (-transition-timing [_] (throw (ex-info "should not be called" {})))))
+    (-transition-timing [_] (throw (ex-info "should not be called" {})))
+    (-transition-delay [_] (throw (ex-info "toggles cant be delayed" {})))))
 
+;; common transitions
 (defn fade-in
-  ([] (fade-in "ease"))
+  ([] (fade-in "ease-in"))
   ([timing-function]
      (transition-attr :opacity "0" "1" timing-function)
      ))
 
+(defn fade-out
+  ([] (fade-in "ease-out"))
+  ([timing-function]
+     (transition-attr :opacity "1" "0" timing-function)
+     ))
 
 (comment
   "combined transitions, will unblock when all completed"

@@ -23,6 +23,7 @@
         args (when (and args (not= "" args))
                (reader/read-string args))
         args (condp = dom-ref
+               nil args
                "none" args
                "self" (cons script args)
                "parent" (cons (dom/get-parent script) args)
@@ -58,6 +59,14 @@
   (doseq [script (dom/query (str "script[type=\"shadow/run\"][data-module=\"" module-name "\"]"))]
     (run-script-tag script)
     ))
+
+(defn ^:export ns-ready [ns-name]
+  (so/log "ns-ready" ns-name)
+  (doseq [script (dom/query "script[type=\"shadow/run\"]")
+          :let [fn (dom/data script :fn)
+                fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
+          :when (= ns-name fn-ns)]
+    (run-script-tag script)))
 
 (defn ^:export module-error [module-name e]
   (so/log "module-error" module-name e))

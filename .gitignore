@@ -1,7 +1,10 @@
+/repl
 /target
 /lib
 /classes
 /checkouts
+/dev-resources/public/js/*
+/out
 pom.xml
 pom.xml.asc
 *.jar
@@ -10,3 +13,8 @@ pom.xml.asc
 .lein-failures
 .lein-plugins
 .lein-repl-history
+.lein-cljsbuild*
+.lein-repl*
+.crossover-cljs
+.repl
+.nrepl-port

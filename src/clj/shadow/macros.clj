@@ -1,10 +1,89 @@
 (ns shadow.macros
-  (:require [clojure.walk :as walk]
-            [clojure.string :as str]))
+  (:require [clojure.string :as str]))
 
-(defmacro js-global [sym]
-  (list 'js* (str sym)))
+(defmacro ^{:js-require 'shadow.api} ns-ready
+  []
+  `(shadow.api/ns-ready ~(str *ns*)))
 
+(defmacro log [& args]
+  `(.log js/console ~@(for [arg args]
+                        `(shadow.object/console-friendly ~arg))))
+
+(defmacro
+  ^{:js-require 'shadow.xhr} wait
+  [wait-let & body]
+  ;; if more than 1 result pair, combine and wait for all, otherwise just wait for the one
+  (if (= 2 (count wait-let))
+    (let [[value result] wait-let]
+      `(shadow.xhr/result-wait-on-success ~result (fn [~value] ~@body)))
+
+    (let [let-bindings (->> wait-let
+                            (partition 2)
+                            (map (fn [[name value]]
+                                   (let [alias (gensym)]
+                                     {:name name
+                                      :value value
+                                      :alias alias
+                                      :get-value `(.getValue ~alias)
+                                      }))))]
+      `(let [~@(mapcat (juxt :alias :value) let-bindings)
+             combo# (shadow.xhr/result-combine ~@(map :alias let-bindings))]
+         (shadow.xhr/result-wait-on-success
+          combo#
+          (fn [dummy#]
+            (let [~@(mapcat (juxt :name :get-value) let-bindings)]
+              ~@body)))))))
+
+
+;; EXPERIMENT, dont use
+(defn- parse-tag [spec]
+  (let [spec (name spec)
+        fdot (.indexOf spec ".")
+        fhash (.indexOf spec "#")]
+    (cond
+     (and (= -1 fdot) (= -1 fhash))
+     [spec nil nil]
+
+     (= -1 fhash)
+     [(.substring spec 0 fdot)
+      nil
+      (str/replace (.substring spec (inc fdot)) #"\." " ")]
+
+     (= -1 fdot)
+     [(.substring spec 0 fhash)
+      (.substring spec (inc fhash))
+      nil]
+
+     (> fhash fdot)
+     (throw (str "cant have id after class?" spec))
+
+     :else
+     [(.substring spec 0 fhash)
+      (.substring spec (inc fhash) fdot)
+      (str/replace (.substring spec (inc fdot)) #"\." " ")])))
+
+
+(defn- replace-dom-vectors [form]
+  (cond
+   (and (vector? form) (keyword? (first form)))
+   (let [[tag-def & body] form
+         [tag-name tag-id tag-classes] (parse-tag tag-def)]
+     (concat (list 'shadow.dom/macro-node tag-name tag-id tag-classes)
+             (map replace-dom-vectors body)))
+   (seq? form) (apply list (map replace-dom-vectors form))
+   :else
+   form
+   ))
+
+(defmacro domfn [& body]
+  (let [fn-body (replace-dom-vectors body)]
+    `(fn ~@fn-body)
+    ))
+
+;; //would be fancy but needs more thought
+
+
+;; a way to write js classes in cljs, not using it anymore ...
 (def prototype-prop '-prototype)
 
 (defmulti class-prototype (fn [class form] (first form)))
@@ -89,85 +168,3 @@
       (make-methods class-spec)
       )))
 
-
-(defn reduce2 [f val coll]
-  (loop [coll coll
-         result val]
-    (if (empty? coll)
-      result
-      (let [[a b] (take 2 coll)]
-        (recur (drop 2 coll) (f result a b))))
-    ))
-
-(defmacro wait [wait-let & body]
-  ;; if more than 1 result pair, combine and wait for all, otherwise just wait for the one
-  (if (= 2 (count wait-let))
-    (let [[value result] wait-let]
-      `(xhr/result-wait-on-success ~result (fn [~value] ~@body)))
-
-    ;; this really needs a rewrite, first macro ever sure is ugly now
-    (let [results (reduce2 #(conj %1 [%2 (gensym)] %3) [] wait-let)
-          result-let (reduce2 (fn [result [_ key] value]
-                                (conj result key value))
-                              []
-                              results)
-          result-names (reduce2 (fn [result [_ key] _]
-                                  (conj result key))
-                                []
-                                results)
-          value-let (reduce2 (fn [result [orig alias] _]
-                               (conj result orig `(.getValue ~alias)))
-                             []
-                             results)]
-      `(let [~@result-let
-             combo# (xhr/result-combine ~@result-names)]
-         (xhr/result-wait-on-success
-          combo#
-          (fn [dummy#]
-            (let [~@value-let]
-              ~@body)))))))
-
-(defn parse-tag [spec]
-  (let [spec (name spec)
-        fdot (.indexOf spec ".")
-        fhash (.indexOf spec "#")]
-    (cond
-     (and (= -1 fdot) (= -1 fhash))
-     [spec nil nil]
-
-     (= -1 fhash)
-     [(.substring spec 0 fdot)
-      nil
-      (str/replace (.substring spec (inc fdot)) #"\." " ")]
-
-     (= -1 fdot)
-     [(.substring spec 0 fhash)
-      (.substring spec (inc fhash))
-      nil]
-
-     (> fhash fdot)
-     (throw (str "cant have id after class?" spec))
-
-     :else
-     [(.substring spec 0 fhash)
-      (.substring spec (inc fhash) fdot)
-      (str/replace (.substring spec (inc fdot)) #"\." " ")])))
-
-
-(defn replace-dom-vectors [form]
-  (cond
-   (and (vector? form) (keyword? (first form)))
-   (let [[tag-def & body] form
-         [tag-name tag-id tag-classes] (parse-tag tag-def)]
-     (concat (list 'shadow.dom/macro-node tag-name tag-id tag-classes)
-             (map replace-dom-vectors body)))
-   (seq? form) (apply list (map replace-dom-vectors form))
-   :else
-   form
-   ))
-
-;; would be fancy but needs more thought
-(defmacro domfn [& body]
-  (let [fn-body (replace-dom-vectors body)]
-    `(fn ~@fn-body)
-    ))
