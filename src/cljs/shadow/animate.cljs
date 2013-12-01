@@ -36,8 +36,7 @@
                       (throw (ex-info "invalid animation" {:el el :animation adef})))
                     (let [from (-animate-from adef)
                           to (-animate-to adef)
-                          toggles (-animate-toggles adef)
-                          transitions (remove -animate-toggle? attrs)]
+                          toggles (-animate-toggles adef)]
                       {:el el
                        :from from 
                        :to to
@@ -159,9 +158,3 @@
        (-animate-timings [_] {vendor-transform timing})
        (-animate-toggles [_] {})
        (-animate-delays [_] {vendor-transform delay}))))
-
-(comment
-  "combined transitions, will unblock when all completed"
-  (go (<! (anim/start 500 {some-el (fade-in)
-                           other-el (toggle :display "none" "block")
-                           more-el (transition :height "0px" "100px" "ease")}))))

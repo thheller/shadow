@@ -13,18 +13,19 @@
         box (dom/query-one ".box" container)]
 
     (dom/replace-node where container)
-    (log "wtf" :yo {:crazy 'yeah})
     
     (go (loop []
-          (anim/transition 2000 {container [[:font-size "1em" "3em" "linear"]]})
-          (<! (anim/transition 1000 {box [[:padding-left "0px" "200px" "linear"]]}))
-          (<! (anim/transition 1000 {box [[:padding-top "0px" "200px" "linear"]
-                                          [:padding-left "200px" "0px" "linear"]]}))
+          (anim/start 2000 {container (anim/transition :font-size "1em" "3em" "linear")})
+          (<! (anim/start 1000 {box (anim/transition :padding-left "0px" "200px" "linear")}))
+          (<! (anim/start 1000 {box (anim/combine
+                                     (anim/transition :padding-top "0px" "200px" "linear")
+                                     (anim/transition :padding-left "200px" "0px" "linear"))}))
 
-          (anim/transition 2000 {container [[:font-size "3em" "1em" "linear"]]})
-          (<! (anim/transition 1000 {box [[:padding-left "0px" "200px" "linear"]]}))
-          (<! (anim/transition 1000 {box [[:padding-left "200px" "0px" "linear"]
-                                          [:padding-top "200px" "0px" "linear"]]}))
+          (anim/start 2000 {container (anim/transition :font-size "3em" "1em" "linear")})
+          (<! (anim/start 1000 {box (anim/transition :padding-left "0px" "200px" "linear")}))
+          (<! (anim/start 1000 {box (anim/combine
+                                     (anim/transition :padding-left "200px" "0px" "linear")
+                                     (anim/transition :padding-top "200px" "0px" "linear"))}))
 
           (recur)))))
 
