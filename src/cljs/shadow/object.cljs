@@ -125,7 +125,7 @@
           name)))
     ))
 
-(extend-type js/Function
+(extend-type function
   IPrintWithWriter
   (-pr-writer [this writer opts]
     (if-let [sig (get-func-signature this)]
