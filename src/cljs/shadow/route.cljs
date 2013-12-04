@@ -189,7 +189,6 @@
                         (fn [e]
                           (when (.-isNavigation e)
                             (let [new-token (.-token e)]
-                              (so/log "navigate event" handler new-token)
                               (so/notify! handler :route/navigate new-token)))))]
 
     (so/add-reaction! handler :destroy
