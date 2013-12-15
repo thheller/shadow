@@ -1,5 +1,5 @@
 (ns shadow.api
-  (:require-macros [shadow.macros :refer (wait)])
+  (:require-macros [shadow.macros :refer (wait log)])
   (:require [cljs.reader :as reader]
             [shadow.xhr :as xhr]
             [shadow.object :as so]
@@ -33,9 +33,9 @@
 
     (let [queued-fn (goog/getObjectByName init-fn)]
     (if queued-fn
-      (do (so/log "init" init-fn)
+      (do (log "init" init-fn)
           (apply queued-fn args))
-      (so/log "unknown init function" init-fn args)))))
+      (log "unknown init function" init-fn args)))))
 
 (def modules (atom #{}))
 
@@ -51,7 +51,7 @@
         (run-script-tag script)))))
 
 (defn ^:export module-ready [module-name]
-  (so/log "module-ready" module-name)
+  (log "module-ready" module-name)
   (swap! modules conj module-name)
 
   ;; module finished loading, run all associated script tags
@@ -62,12 +62,10 @@
       )))
 
 (defn ^:export ns-ready [ns-name]
-  (so/log "ns-ready" ns-name)
-  (doseq [script (dom/query "script[type=\"shadow/run\"]")
-          :let [fn (dom/data script :fn)
-                fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
-          :when (= ns-name fn-ns)]
-    (run-script-tag script)))
-
-(defn ^:export module-error [module-name e]
-  (so/log "module-error" module-name e))
+  (log "ns-ready" ns-name)
+  (let [ns-name (str/replace ns-name #"-" "_")]
+    (doseq [script (dom/query "script[type=\"shadow/run\"]")
+            :let [fn (dom/data script :fn)
+                  fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
+            :when (= ns-name fn-ns)]
+      (run-script-tag script))))
