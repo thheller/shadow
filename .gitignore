@@ -5,6 +5,7 @@
 /checkouts
 /dev-resources/public/js/*
 /out
+/public/cljs
 pom.xml
 pom.xml.asc
 .DS_Store

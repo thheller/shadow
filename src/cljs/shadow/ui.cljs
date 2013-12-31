@@ -173,7 +173,6 @@
                          (dom/set-value this (-encode input-type nv))
                          ))])
 
-
 (defn dom-select-options-grouped [input-type options]
   ;; FIXME: can you nest more than 1 lvl? never done it.
   (for [[group-label group-options] options]
@@ -232,6 +231,7 @@
                             (when (do-validation this value)
                               (so/notify! parent :input/change a value this)))
                           )])
+
 
 (defn dom-select
   ([obj attr type options]

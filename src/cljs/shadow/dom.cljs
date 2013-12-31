@@ -216,10 +216,15 @@
     (-to-dom [this] this)
     ))
 
-
 (defn append
-  ([node] (dom/append (.-body js/document) (dom-node node)))
-  ([el node] (dom/append (dom-node el) (dom-node node))))
+  ([node]
+     (let [n (dom-node node)]
+       (dom/append (.-body js/document) n)
+       n))
+  ([el node]
+     (let [n (dom-node node)]
+       (dom/append (dom-node el) n)
+       n)))
 
 (defn query-one
   ([sel] (.querySelector js/document sel))
