@@ -445,6 +445,11 @@
   (dom/insertSiblingBefore (dom-node new)
                            (dom-node ref)))
 
+(defn insert-first [ref new]
+  (if-let [child (.-firstChild (dom-node ref))]
+    (insert-before child new)
+    (append ref new)))
+
 (defn get-parent [el]
   (dom/getParentElement (dom-node el)))
 
