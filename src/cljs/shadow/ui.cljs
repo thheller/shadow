@@ -300,6 +300,11 @@
                            ))))
 
        :dom/init (fn [{:keys [a parent input-type capture] :as this}]
+                   (when (contains? capture :key-up)
+                     (dom/on this :keyup
+                             (fn [e]
+                               (so/notify! parent :input/key-up a this e))))
+
                    (when (contains? capture :enter)
                      (dom/on this :keyup
                              (fn [e]
