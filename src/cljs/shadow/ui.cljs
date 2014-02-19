@@ -514,8 +514,10 @@
 
     (add-watch atm :store-locally
                (fn [_ _ _ new]
-                 (aset local-storage name (pr-str new))
-                 ))
+                 (try
+                   (aset local-storage name (pr-str new))
+                   (catch :default e
+                     (so/log "localStorage failed" e)))))
 
     atm
     ))
