@@ -1,4 +1,5 @@
 (ns shadow.ui
+  (:require-macros [shadow.macros :refer (log)])
   (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
             [shadow.dom :as dom]
@@ -210,6 +211,7 @@
                               (so/update! this assoc :options nv) ;; dont really need to do this?
 
                               (let [curval (-encode input-type v)]
+                                (log "select/set-options" a v curval nv)
                                 (dom/reset this)
                                 (doseq [opt (dom-select-options this nv)]
                                   (dom/append this opt))
@@ -229,6 +231,7 @@
                           (let [sval (dom/get-value this)
                                 value (-decode input-type sval)]
                             (when (do-validation this value)
+                              (so/update! this assoc :v value)
                               (so/notify! parent :input/change a value this)))
                           )])
 
@@ -330,16 +333,18 @@
                              (when (not= new-value v)
                                (so/update! this assoc :v new-value)
                                (so/notify! parent :input/change a new-value this))
-                             )))
+                             )))])
+(comment
+  ;; validate on blur is more annoying then helpful
+  ;;:blur
+  (fn [{:keys [parent a input-type v] :as this} ev]
+    (so/notify! parent :input/blur a this)
 
-               :blur (fn [{:keys [parent a input-type v] :as this} ev]
-                       (so/notify! parent :input/blur a this)
+    (let [sval (dom/get-value this)
+          new-value (-decode input-type sval)]
 
-                       (let [sval (dom/get-value this)
-                             new-value (-decode input-type sval)]
-
-                         ;; FIXME: validates once on change and once on blur
-                         (do-validation this new-value)))])
+      ;; FIXME: validates once on change and once on blur
+      (do-validation this new-value))))
 
 (defn dom-input [obj attr type attrs]
   (when-not (satisfies? IInputType type)
