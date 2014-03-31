@@ -374,6 +374,8 @@
    (-> result
        ;; FIXME: there might be more keys to merge, need some kind of merge logic definition
        (update-in [::reactions] merge-reactions (:on behavior []))
+       (update-in [:watch] (fn [watches]
+                             (concat watches (:watch behavior []))))
        (update-in [:dom/events] (fn [default]
                                   (-> default
                                       (concat (:dom/events behavior []))
