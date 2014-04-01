@@ -7,9 +7,10 @@
 
 (defmacro ^{:js-require 'shadow.object} log
   [& args]
-  `(when js/console
-     (.log js/console ~@(for [arg args]
-                          `(shadow.object/console-friendly ~arg)))))
+  `(let [console# (aget js/window "console")]
+     (when console#
+       (.log console# ~@(for [arg args]
+                          `(shadow.object/console-friendly ~arg))))))
 
 (defmacro ^{:js-require 'shadow.xhr} wait
   [wait-let & body]
