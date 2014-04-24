@@ -480,7 +480,8 @@
 (defn make-svg-node [structure]
   (let [[node node-children] (destructure-node create-svg-node structure)]
 
-    (doseq [child-struct node-children]
+    (doseq [child-struct node-children
+            :when (not (nil? child-struct))]
       (if (string? child-struct)
         (let [text (aget node "textContent")]
           (aset node "textContent" (str text child-struct)))
