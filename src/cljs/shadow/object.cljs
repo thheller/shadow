@@ -489,7 +489,9 @@
 
   dom/IElement
   (-to-dom [this] (::dom data))
-  )
+  
+  dom/SVGElement
+  (-to-svg [this] (::dom data)))
 
 (defn add-reaction!
   ([oref ev handler-fn]

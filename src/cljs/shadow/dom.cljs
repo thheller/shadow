@@ -473,6 +473,7 @@
     
       (doseq [[k v] props]
         (.setAttribute el (name k) v))
+
       el
       )))
 
@@ -480,12 +481,15 @@
   (let [[node node-children] (destructure-node create-svg-node structure)]
 
     (doseq [child-struct node-children]
-      (let [children (-to-svg child-struct)]
-        (if (seq? children)
-          (doseq [child children]
-            (when child
-              (.appendChild node child)))
-          (.appendChild node children))))
+      (if (string? child-struct)
+        (let [text (aget node "textContent")]
+          (aset node "textContent" (str text child-struct)))
+        (let [children (-to-svg child-struct)]
+          (if (seq? children)
+            (doseq [child children]
+              (when child
+                (.appendChild node child)))
+            (.appendChild node children)))))
     node))
 
 (extend-protocol SVGElement
