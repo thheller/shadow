@@ -185,9 +185,9 @@
     (doseq [child-struct node-children]
       (let [children (dom-node child-struct)]
         (if (seq? children)
-          (doseq [child children]
-            (when child
-              (dom/append node child)))
+          (doseq [child (map dom-node children)
+                  :when child]
+            (dom/append node child))
           (do
             (dom/append node children)))))
     node))
@@ -320,10 +320,16 @@
   (.removeAttribute (dom-node el) (name key)))
 
 ;; dont ever include a script including this in <head>!
+;; FIXME: is it worth using dataset over get/setAttribute?
 (def data
   (if (.. js/document -body -dataset)
     (fn data-dataset [el key]
-      (aget (-> el dom-node .-dataset) (gstr/toCamelCase (name key))))
+      (try
+        (aget (-> el dom-node .-dataset) (gstr/toCamelCase (name key)))
+        (catch :default e
+          ;; firefox doesn't have el.dataset on svg nodes!
+          (.getAttribute (dom-node el) (str "data-" (name key))))
+        ))
     (fn data-get-attribute [el key]
       (.getAttribute (dom-node el) (str "data-" (name key)))) ;; fallback
     ))
@@ -331,7 +337,12 @@
 (def set-data 
   (if (.. js/document -body -dataset)
     (fn set-data-dataset [el key value]
-      (aset (-> el dom-node .-dataset) (gstr/toCamelCase (name key)) (str value)))
+      (try
+        (aset (-> el dom-node .-dataset) (gstr/toCamelCase (name key)) (str value))
+        (catch :default e
+          ;; firefox doesn't have el.dataset on svg nodes!
+          (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
+        ))
     (fn set-data-set-attribute [el key value]
       (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
     ))
