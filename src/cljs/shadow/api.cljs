@@ -37,32 +37,23 @@
           (apply queued-fn args))
       (log "unknown init function" init-fn args)))))
 
-(def modules (atom #{}))
+(def available-namespaces (atom #{}))
 
 (defn run-embedded-tags
   "use after calling (dom/set-html node html) and that html may contain embedded script tags
 
-  only runs tags where the module is already loaded, if the module is not yet loaded to module-ready function
+  only runs tags when the namespace of the function is already loaded, if the ns is not yet loaded to ns-ready function
   will pick remaining tags"
   [node]
-  (doseq [script (dom/query "script[type=\"shadow/run\"]" node)]
-    (let [module (dom/data script :module)]
-      (when (contains? @modules module)
-        (run-script-tag script)))))
-
-(defn ^:export module-ready [module-name]
-  (log "module-ready" module-name)
-  (swap! modules conj module-name)
-
-  ;; module finished loading, run all associated script tags
-  ;; eg. <script type="shadow/run" data-module="something" data-fn="my_ns.some_fn">args data (pr-str args) on server</script>
-  (comment
-    (doseq [script (dom/query (str "script[type=\"shadow/run\"][data-module=\"" module-name "\"]"))]
-      (run-script-tag script)
-      )))
+  (doseq [script (dom/query "script[type=\"shadow/run\"]" node)
+            :let [fn (dom/data script :fn)
+                  fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
+            :when (contains? @available-namespaces fn-ns)]
+      (run-script-tag script)))
 
 (defn ^:export ns-ready [ns-name]
   (log "ns-ready" ns-name)
+  (swap! available-namespaces conj ns-name)
   (let [ns-name (str/replace ns-name #"-" "_")]
     (doseq [script (dom/query "script[type=\"shadow/run\"]")
             :let [fn (dom/data script :fn)
