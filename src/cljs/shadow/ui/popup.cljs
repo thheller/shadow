@@ -1,4 +1,5 @@
 (ns shadow.ui.popup
+  (:require-macros [shadow.macros :refer (log)])
   (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
             [shadow.dom :as dom]
@@ -10,6 +11,8 @@
 
 (def body (.. js/document -body))
 
+(def active-popups (atom 0))
+
 (defn close [this]
   (let [parent (so/get-parent this)]
     (so/notify! parent :popup-closing)
@@ -19,6 +22,9 @@
 (so/define ::popup-backdrop
   :on [:init (fn [this]
                (dom/add-class body "modal-visible"))
+       
+       :dom/init (fn [this]
+                   (dom/set-style this {:z-index (* 10000 (::level this))}))
 
        :destroy (fn [this]
                   (dom/remove-class body "modal-visible"))]
@@ -51,7 +57,8 @@
 
 (defn show [popup]
   (let [;; make backdrop a child of the popup, so it gets destroyed when the popup is destroyed, neat eh?
-        backdrop (so/create ::popup-backdrop {:parent popup})]
+        backdrop (so/create ::popup-backdrop {:parent popup
+                                              ::level (::level popup)})]
 
     (kb/push-focus backdrop)
     (kb/push-focus popup)
@@ -75,6 +82,15 @@
     popup
     ))
 
-(defn open [parent popup-type obj]
-  (show (create parent popup-type obj)))
+(defn open [parent popup-type args]
+  (swap! active-popups inc)
+  (let [lvl @active-popups
+        popup (create parent popup-type (assoc args
+                                          ::level lvl))]
+    (so/add-reaction! popup :destroy (fn []
+                                       (swap! active-popups dec)))
+    
+    (dom/set-style popup {:z-index (+ 1 (* 10000 lvl))}) 
+    
+    (show popup)))
 
