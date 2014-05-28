@@ -1,5 +1,5 @@
 (ns shadow.dom
-  (:refer-clojure :exclude [remove contains?])
+  (:refer-clojure :exclude [remove contains? parents])
   (:require-macros [cljs.core.async.macros :refer (go)])
   (:require [goog.dom :as dom]
             [goog.dom.forms :as gf]
