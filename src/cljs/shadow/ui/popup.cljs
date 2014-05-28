@@ -13,11 +13,15 @@
 
 (def active-popups (atom 0))
 
-(defn close [this]
-  (let [parent (so/get-parent this)]
-    (so/notify! parent :popup-closing)
-    (so/destroy! this)
-    (so/notify! parent :popup-closed)))
+(defn close 
+  ([this]
+     (close this nil))
+  ([this return-value]
+     (let [parent (so/get-parent this)]
+       (so/notify! parent :popup-closing)
+       (so/return-value this return-value)
+       (so/destroy! this)
+       (so/notify! parent :popup-closed))))
 
 (so/define ::popup-backdrop
   :on [:init (fn [this]

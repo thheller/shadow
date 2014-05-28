@@ -1,8 +1,11 @@
 (ns shadow.object
   (:refer-clojure :exclude (tree-seq))
   (:require [shadow.dom :as dom]
+            [cljs.core.async :as async]
             [clojure.string :as str]
-            [clojure.data :as data]))
+            [clojure.data :as data]
+            [cljs.core.async.impl.protocols :as async-impl]
+            ))
 
 (defn console-friendly [a]
   (cond
@@ -159,7 +162,8 @@
   (-id [this])
   (-type [this])
   (-data [this])
-  (-update [this update-fn] "update and notify watches"))
+  (-update [this update-fn] "update and notify watches")
+  (-destroy! [this cause]))
 
 (defn get-type [this]
   (-type this))
@@ -199,7 +203,6 @@
       (if (= (-type parent) parent-type)
         parent
         (recur (:parent parent))))))
-
 
 ;; FIXME: would be nice if these were in dom order
 ;; but since children arent always direct dom children
@@ -285,6 +288,9 @@
     (-update oref work-fn)
     ))
 
+(defn return-value [oref return-value]
+  (update! oref assoc ::return-value return-value))
+
 (defn- set-parent! [child parent]
   (let [child-id (-id child)
         parent-id (-id parent)]
@@ -309,22 +315,7 @@
   ([oref]
      (destroy! oref :direct))
   ([oref cause]
-     (let [obj-id (-id oref)
-           parent-id (get @instance-parent obj-id)]
-
-       ;; destroy children before destroying parent
-       (doseq [child (get-children oref)]
-         (destroy! child :parent))
-
-       (dom-destroy oref cause)
-       (notify! oref :destroy cause)
-
-       (swap! instances dissoc obj-id)
-       (swap! instance-parent dissoc obj-id)
-       (when parent-id
-         (swap! instance-children update-in [parent-id] disj obj-id)))
-
-     ))
+     (-destroy! oref cause)))
 
 (defn bind-dom-events [oref dom dom-events]
   (when-not (zero? (rem (count dom-events) 2))
@@ -436,7 +427,7 @@
 
 (defrecord Watch [key handler])
 
-(deftype ObjectRef [id type ^:mutable data ^:mutable watches]
+(deftype ObjectRef [id type ^:mutable data ^:mutable watches result-chan]
   IObject
   (-id [this] id)
   (-type [this] type)
@@ -452,6 +443,29 @@
         ;; maybe queue all other modifications until this is finished?
         (when (alive? this)
           (handler key this old new)))))
+  (-destroy! [this cause]
+    (let [parent-id (get @instance-parent id)]
+
+      ;; destroy children before destroying parent
+      (doseq [child (get-children this)]
+        (-destroy! child :parent))
+
+      (dom-destroy this cause)
+      (notify! this :destroy cause)
+      
+      (let [return-value (::return-value this)]
+        (when-not (nil? return-value)
+          (async/put! result-chan return-value))
+        (async/close! result-chan))
+
+      (swap! instances dissoc id)
+      (swap! instance-parent dissoc id)
+      (when parent-id
+        (swap! instance-children update-in [parent-id] disj id))))
+  
+  async-impl/ReadPort
+  (take! [this ^not-native handler]
+    (async-impl/take! result-chan handler))
 
   IEquiv
   (-equiv [this other]
@@ -523,7 +537,7 @@
     ;; not sure if its useful to keep track of this inside the object itself?
     (notify-tree! child :dom/entered)))
 
-(defn create [type args]
+(defn create [type args & node-children]
   (when-not (contains? @object-defs type)
     (throw (ex-info (str "cannot create unknown child type: " type) {:type type :args args})))
   (when-not (map? args)
@@ -531,6 +545,8 @@
 
   (let [oid (next-id)
         parent (:parent args)
+        
+        result-chan (async/chan 1)
 
         odef (get @object-defs type)
 
@@ -540,7 +556,7 @@
                 (merge-defaults type)
                 (dissoc :parent :dom))
 
-        oref (ObjectRef. oid type obj [])]
+        oref (ObjectRef. oid type obj [] result-chan)]
 
     ;; dont use oref before this
     (swap! instances assoc oid oref)
@@ -560,7 +576,7 @@
           (notify! oref :dom/init dom))
         ;; create+events
         (when-let [dom-fn (:dom odef)]
-          (let [dom (dom/build (dom-fn oref))]
+          (let [dom (dom/build (dom-fn oref node-children))]
 
             (dom/set-data dom :oid oid)
 

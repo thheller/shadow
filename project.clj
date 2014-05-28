@@ -4,9 +4,9 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
-  :dependencies [[org.clojure/clojure "1.5.1"]
+  :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/clojurescript "0.0-2138"]
-                 [org.clojure/core.async "0.1.267.0-0d7780-alpha"]]
+                 [org.clojure/core.async "0.1.303.0-886421-alpha"]]
   
   :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.clojure/clojurescript "0.0-2127" :exclusions [org.mozilla/rhino]]

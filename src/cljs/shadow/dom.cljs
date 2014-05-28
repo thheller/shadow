@@ -309,6 +309,9 @@
 (defn children [el]
   (NativeColl. (.-children (dom-node el))))
 
+(defn child-nodes [el]
+  (NativeColl. (.-childNodes (dom-node el))))
+
 (defn attr
   ([el key] (.getAttribute (dom-node el) (name key)))
   ([el key default] (or (.getAttribute (dom-node el) (name key)) default)))
@@ -464,6 +467,10 @@
 (defn get-parent [el]
   (dom/getParentElement (dom-node el)))
 
+(defn parents [el]
+  (let [parent (get-parent el)]
+    (when parent
+      (cons parent (lazy-seq (parents parent))))))
 
 (defn get-next-sibling [el]
   (dom/getNextElementSibling (dom-node el)))

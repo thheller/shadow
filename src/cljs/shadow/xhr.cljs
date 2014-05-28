@@ -1,5 +1,7 @@
 (ns shadow.xhr
+  "FIXME: rewrite to using promises, since closure is deprecating result"
   (:require [goog.result :as gresult]
+            goog.result.SimpleResult
             [goog.labs.net.xhr :as gxhr]
             [cljs.reader :as cr]
             [goog.uri.utils :as gutils]
@@ -78,17 +80,18 @@
        (throw (ex-info "request needs data" {:method method :url url :data data :options options})))
 
      (let [body? (not (or (= :GET method) (nil? data)))
-           req (gxhr/send (name method)
-                          (if (and (= :GET method) data)
-                            (make-url url data)
-                            url)
-                          (when body?
-                            (pr-str data))
-                          (make-request-options
-                           (if body?
-                             (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8")
-                             options))
-                          )]
+           req (-> (gxhr/send (name method)
+                              (if (and (= :GET method) data)
+                                (make-url url data)
+                                url)
+                              (when body?
+                                (pr-str data))
+                              (make-request-options
+                               (if body?
+                                 (assoc-in options [:headers "Content-Type"] "text/edn; charset=utf-8")
+                                 options))
+                              )
+                   (js/goog.result.SimpleResult.fromPromise))]
        (gresult/transform req auto-transform))))
 
 
