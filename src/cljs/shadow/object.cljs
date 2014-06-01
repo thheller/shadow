@@ -348,7 +348,7 @@
     (assoc result event (conj current handler))))
 
 (defn- merge-reactions [result behavior]
-  (when-not (vector? behavior)
+  (when-not (sequential? behavior)
     (throw (ex-info "behaviors must be vectors" {:behavior behavior})))
   (when-not (even? (count behavior))
     (throw (ex-info "invalid behavior" {:behavior behavior})))
@@ -358,7 +358,7 @@
 
 (defn- merge-behaviors [result behavior]
   (cond
-   (vector? behavior)
+   (sequential? behavior)
    (update-in result [::reactions] merge-reactions behavior)
 
    (map? behavior)
@@ -521,7 +521,7 @@
      (when-not (satisfies? IObject oref)
        (throw (ex-info "binding currently only supports shadow objects, other atoms might leak, may add later" {:oref oref :attr attr})))
 
-     (let [attr (if (vector? attr) attr [attr])]
+     (let [attr (if (sequential? attr) attr [attr])]
        (add-watch oref watch-key
                   (fn bind-change-watch [_ _ old new]
                     (let [ov (get-in old attr)
@@ -599,7 +599,7 @@
   only use if the node has no attached behavior like clicks, use bind with an extra object for those"
   ([oref attr] (bind-simple oref attr str))
   ([oref attr node-gen]
-     (let [attr (if (vector? attr) attr [attr])
+     (let [attr (if (sequential? attr) attr [attr])
            node-get #(dom/build (node-gen %))
            node (atom (node-get (get-in oref attr)))
            bind-key (gensym "bind")]
@@ -618,7 +618,7 @@
   "bind the given attribute a child item
   the item will be recreated whenever the value changes (old one will be destroyed)"
   ([oref attr item-type item-key item-attrs]
-     (let [attr (if (vector? attr) attr [attr])
+     (let [attr (if (sequential? attr) attr [attr])
            curval (get-in oref attr)
 
            make-child-fn (fn [value]
@@ -654,7 +654,7 @@
   ([node parent attr item-type item-key]
      (bind-children node parent attr item-type item-key #(map-indexed vector %)))
   ([node parent attr item-type item-key coll-transform]
-     (let [attr (if (vector? attr) attr [attr])
+     (let [attr (if (sequential? attr) attr [attr])
 
            update-children (atom true)
 

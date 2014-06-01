@@ -382,6 +382,9 @@
 (defn str->fragment [s]
   (NativeColl. (dom/htmlToDocumentFragment s)))
 
+(defn node-name [el]
+  (.-nodeName (dom-node el)))
+
 (defn ancestor-by-class [el cls]
   (dom/getAncestorByClass (dom-node el) cls))
 
