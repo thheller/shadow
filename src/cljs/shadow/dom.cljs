@@ -450,6 +450,10 @@
      (aset js/document "location" "href" (build-url path query-params))
      ))
 
+(defn reload! []
+  (set! (.. js/document -location -href)
+        (.. js/document -location -href)))
+
 (defn tag-name [el]
   (let [dom (dom-node el)]
     (.-tagName dom)))

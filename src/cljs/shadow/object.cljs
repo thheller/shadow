@@ -192,6 +192,17 @@
       (get-by-id (js/parseInt oid)))
     ))
 
+(defn is-object? [obj-or-dom]
+  (or (satisfies? IObject obj-or-dom)
+      (get-from-dom obj-or-dom)))
+
+(defn equal? [obj obj-or-dom]
+  (assert (satisfies? IObject obj) "can only test objects")
+  (if (satisfies? IObject obj-or-dom)
+    (= (-id obj) (-id obj-or-dom))
+    (= (-id obj) (when-let [oid (dom/data obj-or-dom :oid)]
+                   (js/parseInt oid)))))
+
 (defn ^:export get-parent [oref]
   (when-let [parent-id (get @instance-parent (-id oref))]
     (get @instances parent-id)

@@ -3,6 +3,7 @@
            goog.math.Size
            goog.math.Coordinate)
   (:require [shadow.dom :as dom]
+            [shadow.object :as so]
             [goog.positioning :as pos]
             ))
 
@@ -99,13 +100,22 @@
    overflow
    preferred-size
    viewport]
-  (pos/positionAtAnchor
-   (dom/dom-node anchor)
-   (->corner anchor-corner)
-   (dom/dom-node el)
-   (->corner el-corner)
-   (->coordinate offsets)
-   (->box margins)
-   (->overflow overflow)
-   (->size preferred-size)
-   (->box viewport)))
+  (let [pos-fn (fn []
+                 (pos/positionAtAnchor
+                  (dom/dom-node anchor)
+                  (->corner anchor-corner)
+                  (dom/dom-node el)
+                  (->corner el-corner)
+                  (->coordinate offsets)
+                  (->box margins)
+                  (->overflow overflow)
+                  (->size preferred-size)
+                  (->box viewport)))]
+
+    (when (so/is-object? anchor)
+      (so/add-reaction! anchor :position/update pos-fn))
+    (when (so/is-object? el)
+      (so/add-reaction! el :position/update pos-fn))
+    
+    (pos-fn)
+    ))

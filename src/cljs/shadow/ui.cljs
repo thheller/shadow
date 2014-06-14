@@ -211,7 +211,6 @@
                               (so/update! this assoc :options nv) ;; dont really need to do this?
 
                               (let [curval (-encode input-type v)]
-                                (log "select/set-options" a v curval nv)
                                 (dom/reset this)
                                 (doseq [opt (dom-select-options this nv)]
                                   (dom/append this opt))
