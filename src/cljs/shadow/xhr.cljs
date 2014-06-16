@@ -174,18 +174,18 @@
            
        (dom/on req :loadstart (event-handler req events :loadstart))
        (dom/on req :progress (event-handler req events :progress))
-       (dom/on req :abort (event-handler req event :abort))
-       (dom/on req :timeout (event-handler req event :timeout))
+       (dom/on req :abort (event-handler req events :abort))
+       (dom/on req :timeout (event-handler req events :timeout))
 
-       (dom/on req :loadend (let [callback (event-handler req event :loadend)]
+       (dom/on req :loadend (let [callback (event-handler req events :loadend)]
                               (fn [e]
                                 (callback e)
                                 (async/close! result-chan))))
 
-       (let [error-handler (event-handler req event :error)]
+       (let [error-handler (event-handler req events :error)]
          (dom/on req :error error-handler)
 
-         (dom/on req :load (let [callback (event-handler req event :load)]
+         (dom/on req :load (let [callback (event-handler req events :load)]
                              (fn [e]
                                (let [status (.-status req)
                                      body (auto-transform req)]
