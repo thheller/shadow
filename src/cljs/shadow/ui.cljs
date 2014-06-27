@@ -46,12 +46,17 @@
     (-encode [this val]
       (str val))))
 
+;; FIXME: nil resolution for select options
+;; didnt use selectedIndex cause of grouped selects
 (def text-type
   (reify IInputType
     (-decode [this string]
-       (str/trim string))
+      (when (not= string "--nil--")
+        (str/trim string)))
     (-encode [this val]
-      (str val))))
+      (if (nil? val)
+        "--nil--"
+        (str val)))))
 
 (def keyword-type
   (reify IInputType
@@ -169,9 +174,11 @@
 (def dom-input-behavior
   [:input/force-validation quick-validation
    :input/set-values (fn [{:keys [a input-type] :as this} new-values]
-                       (when-let [nv (get-in new-values a)]
-                         (so/update! this assoc :v nv)
-                         (dom/set-value this (-encode input-type nv))
+                       (let [nv (get-in new-values a ::not-set)]
+                         ;; might contain nil, so check for sentinel
+                         (when (not= nv ::not-set)
+                           (so/update! this assoc :v nv)
+                           (dom/set-value this (-encode input-type nv)))
                          ))])
 
 (defn dom-select-options-grouped [input-type options]
@@ -217,13 +224,18 @@
                                 
                                 (let [values (dom/select-option-values this)
                                       value-set (set values)]
-                                  (if (and curval (contains? value-set curval)) ;; new options include all value, reselect it
+                                  (if (and curval (contains? value-set curval))
+                                    ;; new options include all value, reselect it
                                     (dom/set-value this curval)
                                     ;; new options dont include old one, select first option and notify parent
                                     ;; FIXME: what to do when options are empty? really more of an app concern?
+                                    ;; FIXME: this might cause stack overflow if you set-options on input/change
                                     (when-let [n-val (first values)]
                                       (dom/set-value this n-val)
-                                      (so/notify! parent :input/change a (-decode input-type n-val) this)))
+                                      (let [my-val (-decode input-type n-val)]
+                                        (so/update! this assoc :v my-val)
+                                        (so/notify! parent :input/change a my-val this))
+                                      ))
                                   ))))]
 
   :dom/events [:change  (fn [{:keys [a parent input-type] :as this} ev]
