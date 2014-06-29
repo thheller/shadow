@@ -461,8 +461,8 @@
       (doseq [child (get-children this)]
         (-destroy! child :parent))
 
-      (dom-destroy this cause)
       (notify! this :destroy cause)
+      (dom-destroy this cause)
       
       (let [return-value (::return-value this)]
         (when-not (nil? return-value)
