@@ -228,7 +228,7 @@
                              (assoc-in options [:headers "Content-Type"] content-type)
                              options))
                           )
-           ;; req (js/goog.result.SimpleResult.fromPromise req)
+           req (js/goog.result.SimpleResult.fromPromise req)
            ]
        (gresult/transform req auto-transform))))
 
