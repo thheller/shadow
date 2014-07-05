@@ -3,7 +3,7 @@
   (:require [shadow.dom :as dom]
             [shadow.object :as so]
             [clojure.string :as str]
-            [cljs.core.async :refer (timeout)]
+            [cljs.core.async :as async]
             [goog.dom.vendor :as vendor]))
 
 ;; not actually sure a protocol is any help here, just a map of maps would work too
@@ -52,9 +52,9 @@
         set-animate-toggle #(doseq [{:keys [el toggles]} items]
                               (dom/set-style el (assoc toggles :transition nil)))]
     (go (set-animate-from) 
-        (<! (timeout 0)) ;; give dom a chance to apply styles
+        (<! (async/timeout 0)) ;; give dom a chance to apply styles
         (set-animate-to)
-        (<! (timeout duration))
+        (<! (async/timeout duration))
         (set-animate-toggle)
         :done
         )))

@@ -258,6 +258,14 @@
     (get oref item-key)
     ))
 
+(defn find-containing-object
+  "find the object that contains this dom node"
+  [dom]
+  (if-let [obj (get-from-dom dom)]
+    obj
+    (when-let [parent (.-parentElement dom)]
+      (recur parent))))
+
 (defn notify! [oref ev & args]
   
   #_ (when-not (contains? @events ev)

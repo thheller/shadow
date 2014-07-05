@@ -486,6 +486,8 @@
   (dom/getPreviousElementSibling (dom-node el)))
 
 
+(def xmlns (atom {"svg" "http://www.w3.org/2000/svg"
+                  "xlink" "http://www.w3.org/1999/xlink"}))
 
 (defn create-svg-node [tag-def props]
   (let [[tag-name tag-id tag-classes] (parse-tag tag-def)]
@@ -497,10 +499,19 @@
         (.setAttribute el "class" (merge-class-string (:class props) tag-classes)))
     
       (doseq [[k v] props]
-        (.setAttribute el (name k) v))
+        (.setAttributeNS el
+          (when-let [ns (namespace k)]
+            (get @xmlns ns))
+          (name k) v))
 
       el
       )))
+
+(defn svg-node [el]
+  (cond
+   (nil? el) nil
+   (satisfies? SVGElement el) (-to-svg ^not-native el)
+   :else el))
 
 (defn make-svg-node [structure]
   (let [[node node-children] (destructure-node create-svg-node structure)]
@@ -510,11 +521,11 @@
       (if (string? child-struct)
         (let [text (aget node "textContent")]
           (aset node "textContent" (str text child-struct)))
-        (let [children (-to-svg child-struct)]
+        (let [children (svg-node child-struct)]
           (if (seq? children)
-            (doseq [child children]
-              (when child
-                (.appendChild node child)))
+            (doseq [child children
+                    :when child]
+              (.appendChild node child))
             (.appendChild node children)))))
     node))
 
@@ -542,25 +553,36 @@
   (-to-svg (vec (concat [:svg attrs] children))))
 
 
+
+
 ;; core.async stuff
 
 (defn event-chan
   "returns a channel for events on el
    transform-fn should be a (fn [e el] some-val) where some-val will be put on the chan
-   once? true to listen only once and close the channel after (also remove event handler)"
+   once-or-cleanup handles the removal of the event handler
+   - true: remove after one event
+   - false: never removed
+   - chan: remove on msg/close"
   ([el event]
      (event-chan el event (fn [e el] [e el]) false))
   ([el event transform-fn]
      (event-chan el event transform-fn false))
-  ([el event transform-fn once?]
-     (let [chan (async/chan (async/sliding-buffer 1))]
-       (dom-listen (dom-node el)
-                   (name event)
-                   (fn event-fn [e]
-                     (async/put! chan (transform-fn e el))
-                     (when once?
-                       (async/close! chan)
-                       (remove-event-handler el event event-fn))))
+  ([el event transform-fn once-or-cleanup]
+     (let [chan (async/chan (async/sliding-buffer 1))
+           event-fn (fn event-fn [e]
+                      (async/put! chan (transform-fn e el))
+                      (when (true? once-or-cleanup)
+                        (remove-event-handler el event event-fn)
+                        (async/close! chan)
+                        ))]
+       (dom-listen (dom-node el) (name event) event-fn)
+       
+       ;; when given a channel fire up a go that removes event handler when closed/msg
+       (when (and once-or-cleanup
+                  (not (true? once-or-cleanup)))
+         (go (<! once-or-cleanup)
+             (remove-event-handler el event event-fn)))
        chan
        )))
 
