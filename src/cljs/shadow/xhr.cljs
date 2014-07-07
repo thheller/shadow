@@ -74,7 +74,6 @@
 (defn make-url [url params]
   (gutils/appendParamsFromMap url (clj->js params)))
 
-
 (defn transform-request-body [data]
   (cond
    (string? data)
@@ -84,7 +83,6 @@
    :default
    ["application/octet-stream" data]
    ))
-
 
 (defn as-url [input]
   (cond
@@ -231,22 +229,6 @@
            req (js/goog.result.SimpleResult.fromPromise req)
            ]
        (gresult/transform req auto-transform))))
-
-
-(defn get-edn [url]
-  (request :GET url nil {}))
-
-(defn xhr-post [{:keys [url params] :as req} data]
-  (gxhr/post (gutils/appendParamsFromMap url (clj->js params))
-             data
-             (clj->js req)))
-
-(defn post-edn [req data]
-  (let [req (if (map? req) req {:url req})
-        req (assoc-in req [:headers "Content-Type"] "text-edn")]
-    (-> (xhr-post req (pr-str data))
-        (gresult/transform edn-transform)
-        )))
 
 (defn upload [url file & events]
   (let [xhr (js/XMLHttpRequest.)]
