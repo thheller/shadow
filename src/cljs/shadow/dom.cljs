@@ -479,6 +479,9 @@
     (when parent
       (cons parent (lazy-seq (parents parent))))))
 
+(defn matches [el sel]
+  (.matches (dom-node el) sel))
+
 (defn get-next-sibling [el]
   (dom/getNextElementSibling (dom-node el)))
 

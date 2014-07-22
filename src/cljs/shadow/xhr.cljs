@@ -57,14 +57,24 @@
 (defn auto-transform [req]
   (let [content-type (.getResponseHeader req "Content-Type")]
     (cond
+     (nil? content-type)
+     (.-responseText req)
+
      (not= -1 (.indexOf content-type "text/edn"))
      (edn-transform (.-responseText req))
+
+     (not= -1 (.indexOf content-type "application/edn"))
+     (edn-transform (.-responseText req))
+
      (not= -1 (.indexOf content-type "json"))
      (json-transform (.-responseText req))
+
      (not= -1 (.indexOf content-type "text/html"))
      (.-responseText req)
+
      (not= -1 (.indexOf content-type "text/plain"))
      (.-responseText req)
+
      (not= -1 (.indexOf content-type "javascript"))
      (.-responseText req)
      :else
@@ -101,7 +111,6 @@
    ))
 
 (defn e->data [e]
-  (log "transform event to data" e)
   e)
 
 (defn event-handler [req events event-type]
@@ -148,7 +157,8 @@
   ([method url data]
      (chan method url data {}))
   ([method url data {:keys [events
-                            upload]
+                            upload
+                            body-only]
                      :as options}]
      (let [req (js/XMLHttpRequest.)
            body? (not= :GET method)
@@ -190,7 +200,9 @@
                                  (if (request-error? status)
                                    (error-handler e)
                                    (do (callback e)
-                                       (async/put! result-chan [status body req]))))))))
+                                       (if body-only
+                                         (async/put! result-chan body)
+                                         (async/put! result-chan [status body req])))))))))
 
        (.open req (name method) (as-url url) true)
 
