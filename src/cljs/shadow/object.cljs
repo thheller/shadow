@@ -655,7 +655,9 @@
 
                         (dom/replace-node current-node new-child)
                         (destroy! @child)
-                        (reset! child new-child))))
+                        (reset! child new-child)
+                        (notify-down! new-child :dom/entered)
+                        )))
 
        @child)
      ))
