@@ -56,7 +56,7 @@
 (defrecord KeyId [key flags])
 
 (defn pretty-key-name [k]
-  (or (char-names k) (.toLowerCase (String/fromCharCode k))))
+  (or (char-names k) (.toLowerCase (js/String.fromCharCode k))))
 
 (defn key-id-from-event [e]
   (let [flags 0

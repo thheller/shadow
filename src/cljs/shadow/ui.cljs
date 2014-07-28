@@ -573,7 +573,7 @@
   ([timeout destruct-fn]
      [:dom/entered
       (fn [this]
-        (let [timer (ui/with-timeout timeout
+        (let [timer (with-timeout timeout
                       #(destruct-fn this))]
           (dom/on this :click
                   (fn [e]
