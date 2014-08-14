@@ -5,11 +5,11 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/core.async "0.1.303.0-886421-alpha"]]
+                 [org.clojure/core.async "0.1.319.0-6b1aca-alpha"]]
   
   :profiles {:dev {:source-paths ["dev"]
-                   :dependencies [[org.clojure/clojurescript "0.0-2261" :exclusions [org.mozilla/rhino]]
-                                  [thheller/shadow-build "0.6.0"]
+                   :dependencies [[org.clojure/clojurescript "0.0-2311" :exclusions [org.mozilla/rhino]]
+                                  [thheller/shadow-build "0.9.1"]
                                   [com.cemerick/clojurescript.test "0.2.1"]]}}
 
   :source-paths ["src/clj" "src/cljs"])
