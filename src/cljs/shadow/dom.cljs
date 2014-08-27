@@ -399,7 +399,14 @@
   (gf/setValue (dom-node dom) value))
 
 (defn set-style [el styles]
-  (gs/setStyle (dom-node el) (clj->js styles)))
+  (let [dom (dom-node el)]
+
+    ;; apparently IE10+ allows setting properties to null which has unexpected effects
+    ;; on transition and display.
+    (doseq [[k v] styles]
+      (gs/setStyle dom (name k) (if (nil? v)
+                                  ""
+                                  v)))))
 
 (defn remove-style [el style]
   (.removeProperty (.-style el) (name style)))
