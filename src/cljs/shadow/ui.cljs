@@ -51,7 +51,7 @@
 (def text-type
   (reify IInputType
     (-decode [this string]
-      (when (not= string "--nil--")
+      (when (and string (not= string "--nil--"))
         (str/trim string)))
     (-encode [this val]
       (if (nil? val)
