@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/core.async "0.1.319.0-6b1aca-alpha"]]
+                 [org.clojure/core.async "0.1.338.0-5c5012-alpha"]]
   
   :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.clojure/clojurescript "0.0-2311" :exclusions [org.mozilla/rhino]]

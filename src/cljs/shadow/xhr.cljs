@@ -10,6 +10,7 @@
             [shadow.object :as so]
             [shadow.dom :as dom]
             [cljs.core.async :as async]
+            [clojure.string :as str]
             ))
 
 (defn result-chain [res handler]
@@ -54,32 +55,27 @@
     obj
     ))
 
+(def content-transforms
+  (atom
+   {"text/edn" edn-transform
+    "application/edn" edn-transform
+    "application/json" json-transform
+    "text/html" identity
+    "text/plain" identity}))
+
+(defn register-transform [content-type transform-fn]
+  (swap! content-transforms assoc content-type transform-fn))
+
 (defn auto-transform [req]
-  (let [content-type (.getResponseHeader req "Content-Type")]
-    (cond
-     (nil? content-type)
-     (.-responseText req)
-
-     (not= -1 (.indexOf content-type "text/edn"))
-     (edn-transform (.-responseText req))
-
-     (not= -1 (.indexOf content-type "application/edn"))
-     (edn-transform (.-responseText req))
-
-     (not= -1 (.indexOf content-type "json"))
-     (json-transform (.-responseText req))
-
-     (not= -1 (.indexOf content-type "text/html"))
-     (.-responseText req)
-
-     (not= -1 (.indexOf content-type "text/plain"))
-     (.-responseText req)
-
-     (not= -1 (.indexOf content-type "javascript"))
-     (.-responseText req)
-     :else
-     (throw (ex-info "unsupported content-type" {:req req :content-type content-type}))
-     )))
+  (let [content-type (let [ct (str/lower-case (.getResponseHeader req "Content-Type"))
+                           sep (.indexOf ct ";")]
+                       (if (not= -1 sep)
+                         (.substring ct 0 sep)
+                         ct))
+        transform-fn (get @content-transforms content-type)]
+    (if (nil? transform-fn)
+      (throw (ex-info "unsupported content-type" {:req req :content-type content-type}))
+      (transform-fn (.-responseText req)))))
 
 (defn make-url [url params]
   (gutils/appendParamsFromMap url (clj->js params)))

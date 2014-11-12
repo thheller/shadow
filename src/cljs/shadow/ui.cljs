@@ -171,80 +171,113 @@
     (do-validation this value)
     ))
 
+(defn dom-input-set-value [{:keys [a input-type] :as this} new-values]
+  (let [nv (get-in new-values a ::not-set)]
+    ;; might contain nil, so check for sentinel
+    (when (not= nv ::not-set)
+      (so/update! this assoc :v nv)
+      (dom/set-value this (-encode input-type nv)))
+    ))
+
 (def dom-input-behavior
   [:input/force-validation quick-validation
-   :input/set-values (fn [{:keys [a input-type] :as this} new-values]
-                       (let [nv (get-in new-values a ::not-set)]
-                         ;; might contain nil, so check for sentinel
-                         (when (not= nv ::not-set)
-                           (so/update! this assoc :v nv)
-                           (dom/set-value this (-encode input-type nv)))
-                         ))])
+   :input/set-values dom-input-set-value])
 
-(defn dom-select-options-grouped [input-type options]
+(defn dom-select-options-grouped [input-type options selected-set]
   ;; FIXME: can you nest more than 1 lvl? never done it.
   (for [[group-label group-options] options]
     (if (string? group-options)
       ;; single option
-      [:option {:value (-encode input-type group-label)} group-options]
+      [:option {:value (-encode input-type group-label)
+                :selected (contains? selected-set group-label)}
+       group-options]
       ;; optgroup
       [:optgroup {:label group-label}
        (for [[value label] group-options]
-         [:option {:value (-encode input-type value)}
+         [:option {:value (-encode input-type value)
+                   :selected (contains? selected-set value)}
           (str label)])])))
 
-(defn dom-select-options-flat [input-type options]
+(defn dom-select-options-flat [input-type options selected-set]
   (for [[value label] options
         :let [label (or label value)]]
-    [:option {:value (-encode input-type value)} (str label)]))
+    [:option {:value (-encode input-type value)
+              :selected (contains? selected-set value)}
+     (str label)]))
 
-(defn dom-select-options [{:keys [input-type group] :as this} options]
+(defn dom-select-options [{:keys [input-type group] :as this} options selected-set]
   (if group
-    (dom-select-options-grouped input-type options)
-    (dom-select-options-flat input-type options)
+    (dom-select-options-grouped input-type options selected-set)
+    (dom-select-options-flat input-type options selected-set)
     ))
 
+(defn dom-select-multiple? [obj]
+  (.-multiple (dom/dom-node obj)))
+
+
+
+
+
 (so/define ::dom-select
-  :dom (fn [{:keys [attrs options] :or {attrs {}} :as this}]
-         [:select attrs (dom-select-options this options)])
+  :dom (fn [{:keys [attrs options v] :or {attrs {}} :as this}]
+         [:select attrs (dom-select-options this options #{v})])
 
   :behaviors [dom-input-behavior]
 
-  :on [:dom/init (fn [{:keys [input-type v] :as this}]
-                   (dom/set-value this (-encode input-type v)))
-
-       :input/set-options (fn [{:keys [a input-type parent v] :as this} new-options]
+  :on [:input/set-options (fn [{:keys [a input-type parent v] :as this} new-options]
                             (when-let [nv (get-in new-options a)]
-                              (so/update! this assoc :options nv) ;; dont really need to do this?
 
                               (let [curval (-encode input-type v)]
                                 (dom/reset this)
-                                (doseq [opt (dom-select-options this nv)]
+                                (doseq [opt (dom-select-options this nv #{v})]
                                   (dom/append this opt))
-                                
-                                (let [values (dom/select-option-values this)
-                                      value-set (set values)]
-                                  (if (and curval (contains? value-set curval))
-                                    ;; new options include all value, reselect it
-                                    (dom/set-value this curval)
-                                    ;; new options dont include old one, select first option and notify parent
-                                    ;; FIXME: what to do when options are empty? really more of an app concern?
-                                    ;; FIXME: this might cause stack overflow if you set-options on input/change
-                                    (when-let [n-val (first values)]
-                                      (dom/set-value this n-val)
-                                      (let [my-val (-decode input-type n-val)]
-                                        (so/update! this assoc :v my-val)
-                                        (so/notify! parent :input/change a my-val this))
-                                      ))
-                                  ))))]
+                                )))]
 
-  :dom/events [:change  (fn [{:keys [a parent input-type] :as this} ev]
-                          (let [sval (dom/get-value this)
-                                value (-decode input-type sval)]
-                            (when (do-validation this value)
-                              (so/update! this assoc :v value)
-                              (so/notify! parent :input/change a value this)))
-                          )])
+  :dom/events [:change (fn [{:keys [a parent input-type] :as this} ev]
+                         (let [sval (dom/get-value this)
+                               value (-decode input-type sval)]
+                           (when (do-validation this value)
+                             (so/update! this assoc :v value)
+                             (so/notify! parent :input/change a value this))))])
+
+(so/define ::dom-select-multiple
+  :dom (fn [{:keys [attrs options v] :or {attrs {}} :as this}]
+         [:select (assoc attrs
+                    :multiple true)
+          (dom-select-options this options v)])
+
+  :on [:input/force-validation quick-validation
+
+       :input/set-values (fn [{:keys [a input-type] :as this} new-values]
+                           (let [nv (get-in new-values a ::not-set)]
+                             ;; might contain nil, so check for sentinel
+                             (when (not= nv ::not-set)
+                               (so/update! this assoc :v nv)
+                               ;; value might be a coll that is not a set
+                               (let [selected-set (into #{} nv)]
+                                 (doseq [node (dom/native-coll (.-options (dom/dom-node this)))
+                                         :let [sval (.-value node)
+                                               val (-decode input-type sval)]]
+                                   (set! (.-selected node) (contains? selected-set val))))
+                               )))
+       
+       :input/set-options (fn [{:keys [a input-type parent v] :as this} new-options]
+                            (when-let [nv (get-in new-options a)]
+                              (dom/reset this)
+                              (doseq [opt (dom-select-options this nv (into #{} v))]
+                                (dom/append this opt))
+                              ))]
+
+  :dom/events [:change (fn [{:keys [a parent input-type] :as this} ev]
+                         (let [node (dom/dom-node this)
+                               value (->> (.-selectedOptions node)
+                                          (dom/native-coll)
+                                          (map (fn [option]
+                                                 (-decode input-type (.-value option))))
+                                          (into #{}))]
+                           (when (do-validation this value)
+                             (so/update! this assoc :v value)
+                             (so/notify! parent :input/change a value this))))])
 
 
 (defn dom-select
@@ -262,7 +295,9 @@
      (let [a (as-path attr)
            v (get-in obj a)]
 
-       (so/create ::dom-select
+       (so/create (if (:multiple select-attrs)
+                    ::dom-select-multiple
+                    ::dom-select)
                   {:parent obj
                    :attrs (dissoc select-attrs :group)
                    :options options
@@ -271,11 +306,18 @@
                    :v v
                    :input-type type}))))
 
+
 (defn dom-select-grouped
   ([obj attr type options]
      (dom-select obj attr type options {:group true}))
   ([obj attr type options select-attrs]
      (dom-select obj attr type options (assoc select-attrs :group true))))
+
+(defn dom-select-multiple
+  ([obj attr type options]
+     (dom-select obj attr type options {:multiple true}))
+  ([obj attr type options select-attrs]
+     (dom-select obj attr type options (assoc select-attrs :multiple true))))
 
 (defn process-dom-input [{:keys [parent a input-type] :as this} ev-type]
   (let [sval (dom/get-value this)

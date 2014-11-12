@@ -42,6 +42,9 @@
   (-to-dom [this] coll)
   )
 
+(defn native-coll [coll]
+  (NativeColl. coll))
+
 (defn dom-node [el]
   ;; FIXME: this method is called alot, how expensive is this check?
   ;; protocols on native elements are funky
