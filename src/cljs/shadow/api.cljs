@@ -1,14 +1,12 @@
 (ns shadow.api
-  (:require-macros [shadow.macros :refer (wait log)])
+  (:require-macros [shadow.macros :refer (log)])
   (:require [cljs.reader :as reader]
-            [shadow.xhr :as xhr]
             [shadow.object :as so]
             [shadow.dom :as dom]
-            [clojure.set :as set]
             [clojure.string :as str]))
 
 (defn run-script-tag
-  "a <script type=\"shadow/run\" data-module=\"mod-name\" data-fn=\"js-fn\">args</script> tag is meant to embed calls to javascript in html
+  "a <script type=\"shadow/run\" data-fn=\"js-fn\">edn-args</script> tag is meant to embed calls to javascript in html
    instead of writing the javascript inline, we only define the call and its args + the location in the dom
    we want to reference. this allows the javascript to be loaded as late as possible, avoids unknown reference errors,
    does not litter the html with $(function() {}); and since a dom reference point is provided it makes it more
