@@ -170,3 +170,7 @@
       (make-methods class-spec)
       )))
 
+
+(defmacro define-node-factories [syms]
+  `(do ~@(for [sym syms]
+           `(def ~sym (shadow.components/ElementFactory. (partial shadow.components/dom-element ~(str/upper-case (name sym))) {} [])))))
