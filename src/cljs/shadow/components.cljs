@@ -1,5 +1,4 @@
 (ns shadow.components
-  (:refer-clojure :exclude (meta map))
   (:require-macros [shadow.macros :as sm :refer (log)]
                    [shadow.components :as sc])
   (:require [clojure.string :as str]
@@ -7,17 +6,22 @@
             [shadow.object :as so]
             [shadow.dom :as dom]))
 
+(def next-id
+  (let [id-seq (atom 0)]
+    (fn []
+      (swap! id-seq inc))))
+
 (defprotocol IElementFactory
-  (-create-element [this children]))
+  (-create-element [this scope children]))
 
 (defprotocol IDynamicElement
-  (-insert-element! [this el]))
+  (-insert-element! [this scope el]))
 
 (defprotocol IElementList
   (-get-elements [this]))
 
-(defprotocol IConstructElement
-  (construct [el]))
+(defprotocol IConstruct
+  (-construct [this scope]))
 
 (defprotocol IScoped
   (-get-scope [this]))
@@ -25,40 +29,34 @@
 (defprotocol IDestructable
   (destroy! [this]))
 
-(defprotocol IObservable
-  (-pull [this] "return the current state")
-  (-subscribe! [this sub-key callback])
-  (-unsubscribe! [this sub-key]))
+(defprotocol IUpdate
+  (-update! [this update-fn]))
 
-(defn apply-attributes! [el attrs]
-  (let [el (dom/dom-node el)]
-    ;; basically clone of goog.dom.setProperties, but with keywords
-    (doseq [[key value] attrs]
-      (case key
-        :id (set! (.-id el) (str value))
-        :class (set! (.-className el) (str value))
-        :for (set! (.-htmlFor el) value)
-        ;; see goog.dom.DIRECT_ATTRIBUTE_MAP_
-        :cellpadding (.setAttribute el "cellPadding" value)
-        :cellspacing (.setAttribute el "cellSpacing" value)
-        :colspan (.setAttribute el "colSpan" value)
-        :frameborder (.setAttribute el "frameBorder" value)
-        :height (.setAttribute el "height" value)
-        :maxlength (.setAttribute el "maxLength" value)
-        :role (.setAttribute el "role" value)
-        :rowspan (.setAttribute el "rowSpan" value)
-        :type (.setAttribute el "type" value)
-        :usemap (.setAttribute el "useMap" value)
-        :valign (.setAttribute el "vAlign" value)
-        :width (.setAttribute el "width" value)
-        ;; FIXME: support :style maps
-        (let [ks (name key)]
-          (if (or (gstr/startsWith ks "data-")
-                  (gstr/startsWith ks "aria-"))
-            (.setAttribute el ks value)
-            (aset el ks value)))))))
+(defprotocol IFramed
+  (process-frame! [this]))
 
-(defn expand-children! [parent children]
+(defprotocol IPull
+  (-pull! [this] "basically IDeref"))
+
+(defn update!
+  ([target target-fn]
+     (-update! target target-fn))
+  ([target target-fn a1]
+     (-update! target #(target-fn % a1)))
+  ([target target-fn a1 a2]
+     (-update! target #(target-fn % a1 a2)))
+  ([target target-fn a1 a2 a3]
+     (-update! target #(target-fn % a1 a2 a3)))
+  ([target target-fn a1 a2 a3 a4]
+     (-update! target #(target-fn % a1 a2 a3 a4)))
+  ([target target-fn a1 a2 a3 a4 a5]
+     (-update! target #(target-fn % a1 a2 a3 a4 a5)))
+  ([target target-fn a1 a2 a3 a4 a5 a6]
+     (-update! target #(target-fn % a1 a2 a3 a4 a5 a6)))
+  ([target target-fn a1 a2 a3 a4 a5 a6 & more]
+     (-update! target #(apply target-fn % a1 a2 a3 a4 a5 a6 more))))
+
+(defn expand-children! [parent scope children]
   (loop [x children]
     (when (seq x)
       (let [[it & more] x]
@@ -69,31 +67,35 @@
          (recur (concat (-get-elements it) more))
 
          (satisfies? IDynamicElement it)
-         (do (-insert-element! it parent)
+         (do (-insert-element! it scope parent)
              (recur more))
          
          :else
-         (let [el (construct it)]
+         (let [el (-construct it scope)]
            (dom/append parent el)
            (recur more)
            ))))))
+
+
 
 (def childless
   #{"IMG"
     "INPUT"})
 
-(defn dom-element [tag attrs init-fns children]
+(defn dom-element [tag scope attrs init-fns children]
   (when (and (contains? childless tag)
              (seq children))
     (throw (ex-info (str tag " cannot have children, yet we got some") {:tag tag
                                                                         :attrs attrs
                                                                         :children children})))
-
+  
   (let [el (js/document.createElement tag)]
-    (apply-attributes! el attrs)
+    (dom/set-attrs el attrs)
+
     (doseq [init-fn init-fns]
-      (init-fn el nil))
-    (expand-children! el children)
+      (init-fn el scope nil))
+
+    (expand-children! el scope children)
     el
     ))
 
@@ -122,36 +124,75 @@
   IDeref
   (-deref [_] el-ctor)
 
+  IConstruct
+  (-construct [^not-native this scope]
+    (-create-element this scope #js []))
+
   IElementFactory
-  (-create-element [_ children]
-    (el-ctor el-attr el-init children)))
+  (-create-element [_ scope children]
+    (el-ctor scope el-attr el-init children)))
 
-(deftype Scope [id parent ^:mutable subs ^:mutable children]
+(defn- process-all! [items]
+  (reduce (fn [_ item] (process-frame! item)) nil items))
+
+(defn filter-by-id [current filter-id]
+  (->> current
+       (remove #(= filter-id (.-id %)))
+       (into [])))
+
+(deftype Scope [id ^:mutable alive? actions children]
+
+  IDestructable
+  (destroy! [this]
+    (set! alive? false)
+    (doseq [[_ child] @children]
+      (destroy! child)
+      ))
+
+  IFramed
+  (process-frame! [this]
+    (process-all! @actions)
+    (process-all! @children))
+  
   Object
-  (addSubscription [this scope-key observable]
-    (set! subs (assoc subs scope-key observable)))
-  (removeSubscription [this scope-key]
-    (set! subs (dissoc subs scope-key)))
+  (addAction [this action]
+    (swap! actions conj action))
+  (removeAction [this action]
+    (swap! actions filter-by-id (.-id action)))
   (addChild [this child]
-    (set! children (assoc children (.-id child) child)))
+    (swap! children conj child))
   (removeChild [this child]
-    (set! children (dissoc children (.-id child))))
+    (swap! children filter-by-id (.-id child))))
 
-  IScoped
-  (-get-scope [this] this)
+(deftype ScopeAction [id ^:mutable alive? scope val observable callback]
+  IFramed
+  (process-frame! [this]
+    ;; an action or scope might be destroyed mid-frame, we don't need to render it then
+    (when (and (.-alive? scope) alive?)
+      (let [old-val @val
+            new-val (-pull! observable)]
+        (when (and (not (identical? old-val new-val))
+                   (not= old-val new-val))
+          (.do! this old-val new-val)
+          ))))
   
   IDestructable
   (destroy! [this]
-    (log "destroying scope" id)
-    (when parent
-      (.removeChild parent this))
-    (doseq [[_ child] children]
-      (destroy! child))
-    (set! children {})
-    (doseq [[key obs] subs]
-      (-unsubscribe! obs key))
-    (set! subs {})
-    ))
+    (set! alive? false)
+    (.removeAction scope this))
+  
+  Object
+  (execute! [this]
+    (.do! this @val (-pull! observable)))
+
+  (do! [this old-val new-val]
+    (reset! val new-val)
+    (callback this old-val new-val)))
+
+(defn scope-action [scope observable callback]
+  (let [action (ScopeAction. (next-id) true scope (atom nil) observable callback)]
+    (.addAction scope action)
+    action))
 
 (deftype ScopedElement [scope el]
   IScoped
@@ -171,145 +212,104 @@
     (fn []
       (str "$$scope" (swap! id inc)))))
 
-(def ^:dynamic *scope* nil)
+(def next-component-id
+  (let [id (atom 0)]
+    (fn [prefix]
+      (str "$$" prefix "$" (swap! id inc)))))
 
 (defn new-scope
-  ([] (new-scope *scope*))
-  ([parent]
-     (let [scope (Scope. (next-scope-id) parent {} {})]
-       (when parent
-         (.addChild parent scope))
-       scope
-       )))
-
-(deftype ScopeKey [scope key]
-  IEquiv
-  (^boolean -equiv [_ other]
-    (and (instance? ScopeKey other)
-         (-equiv key (.-key other))))
-
-  IHash
-  (-hash [_]
-    (-hash key)))
-
-(def gen-scope-key
-  (let [id-seq (atom 0)]
-    (fn []
-      (when (nil? *scope*)
-        (throw (ex-info "cannot create key without scope" {})))
-
-      (ScopeKey. *scope* (str "$$scope-key" (swap! id-seq inc))))))
-
-(defn subscribe! [observable key callback]
-  (let [scope (.-scope key)]
-    (when (nil? scope)
-      (throw (ex-info "cannot subscribe! without a scope" {})))
-    
-    (-subscribe! observable key callback)
-    (.addSubscription scope key observable)
+  [parent]
+  (let [scope (Scope. (next-scope-id)
+                      true
+                      (atom [])
+                      (atom []))]
+    (when parent
+      (.addChild parent scope))
+    scope
     ))
-
-(defn unsubscribe! [observable key]
-  (let [scope (.-scope key)]
-    (when-not scope
-      (throw (ex-info "key without a scope trying to unsub" {})))
-
-    (.removeSubscription scope key)
-    (-unsubscribe! observable key)))
 
 (defn $bind
   "whenever the observable value changes, do (callback el new-value)
    where el is the current dom element"
-  [observable callback]
-  (fn [el owner]
-    (let [sub-key (gen-scope-key)
-          sub-fn (fn sub-fn [new]
-                   (callback el new))]
+  [observable outer-callback]
+  (fn [el scope owner]
+    (let [callback (fn [action old-val new-val]
+                     (outer-callback el new-val))]
 
-      (subscribe! observable sub-key sub-fn)
-      (sub-fn (-pull observable))
-      nil)))
+      (.execute! (scope-action scope observable callback))
+      )))
 
 (defn $bind-attr [attr observable callback]
   ($bind observable (fn [el new-value] (dom/set-attr el attr (callback new-value)))))
 
-(defn $ev [event callback]
-  (fn [el owner]
+(defn on [event callback]
+  (fn [el scope owner]
     (dom/on el event callback)))
 
-(defn <$
-  "whenever the observable value changes, call (ctor new) and replace
-   the previous node with the new one"
-  [observable ctor]
-  (reify
-    IDynamicElement
-    (-insert-element! [_ el]
-      (let [current-el (atom nil)
-            sub-key (gen-scope-key)
-            sub-fn (fn sub-fn [new]
+(deftype DynamicElement [observable ctor]
+  IDynamicElement
+  (-insert-element! [_ scope outer-el]
+    (let [current-el (atom nil)
+
+          callback (fn [action old-val new-val]
                      (let [old-el @current-el]
                        (when (and old-el (satisfies? IDestructable old-el))
                          (destroy! old-el))
-                         
-                       (let [new-def (ctor new)
+                     
+                       (let [new-def (ctor new-val)
                              ;; if no node needs to be constructed at this point
                              ;; just use empty text node as a placeholder
-                             new-el (construct (if (nil? new-def) "" new-def))]
+                             new-el (-construct (if (nil? new-def) "" new-def) scope)]
 
                          (reset! current-el new-el)
 
                          (if old-el
                            (dom/replace-node old-el new-el)
-                           (dom/append el new-el))
+                           (dom/append outer-el new-el))
                          )))]
+      
+      (.execute! (scope-action scope observable callback))
+      )))
 
-        (subscribe! observable sub-key sub-fn)
-        (sub-fn (-pull observable))
-        nil
-        ))))
+(defn <$
+  "<$ read as \"at this position in the tree\""
+  ([observable]
+     (DynamicElement. observable identity))
+  ([observable ctor]
+     (DynamicElement. observable ctor)))
 
-(defn construct-scoped
-  ([el]
-     (construct-scoped *scope* el))
-  ([parent el]
-     (let [scope (new-scope parent)
-           root (binding [*scope* scope]
-                  (construct el))]
-       (ScopedElement. scope root)
-       )))
+(defonce root-scope (new-scope nil))
 
-(defn case-el* [observable branches]
-  (reify
-    IDynamicElement
-    (-insert-element! [_ el]
-      (let [parent-scope *scope*
+(defn construct [el]
+  (-construct el root-scope))
 
-            current (atom nil)
-            
-            sub-key (gen-scope-key)
-
-            sub-fn (fn sub-fn [new]
+(deftype CaseEl [observable branches]
+  IDynamicElement
+  (-insert-element! [_ scope outer-el]
+    (let [current (atom nil)
+          
+          callback (fn [action old-val new-val]
                      (let [old @current]
                        (when old
                          (destroy! old))
-                         
-                       (let [new-branch (branches new)
-                             new-el (construct-scoped
-                                     parent-scope
-                                     (let [new-def (new-branch)]
-                                       (if (nil? new-def) "" new-def)))]
+                     
+                       (let [new-branch (branches new-val)
+                             new-el (-construct (let [new-def (new-branch)]
+                                                  (if (nil? new-def) "" new-def))
+                                                scope)]
 
                          (reset! current new-el)
-                           
+                       
                          (if old
                            (dom/replace-node old new-el)
-                           (dom/append el new-el))
+                           (dom/append outer-el new-el))
                          )))]
+      
+      (.execute! (scope-action scope observable callback))
+      )))
 
-        (subscribe! observable sub-key sub-fn)
-        (sub-fn (-pull observable))
-        nil
-        ))))
+(defn case-el* [observable branches]
+  (CaseEl. observable branches))
 
 (extend-protocol IElementList
   cljs.core/IndexedSeq
@@ -317,42 +317,36 @@
   cljs.core/LazySeq
   (-get-elements [this] this))
 
-(extend-protocol IObservable
+(extend-protocol IPull
   cljs.core/PersistentVector
-  (-pull [[source key]]
-    (get @source key))
-  (-subscribe! [[source key] sub-key sub-fn]
-    (add-watch source (.-key sub-key)
-               (fn [_ _ old new]
-                 (let [ov (get old key)
-                       nv (get new key)]
-                   (when-not (identical? ov nv)
-                     (sub-fn nv))))))
-  (-unsubscribe! [[source _] sub-key]
-    (remove-watch source (.-key sub-key))))
+  (-pull! [[source key]]
+    (if (sequential? key)
+      (get-in @source key)
+      (get @source key))))
 
-(extend-protocol IConstructElement
-  cljs.core/PersistentVector
-  (construct [el]
-    (let [[factory & children] el]
-     (when-not (satisfies? IElementFactory factory)
-       (throw (ex-info (str "invalid vector in tree, must start with factory, got " (type factory)) {:el el})))
-     (-create-element factory children)))
+(extend-protocol IConstruct
+  #_ cljs.core/PersistentVector
+  #_ (-construct [el scope]
+       (let [[factory & children] el]
+         (when-not (satisfies? IElementFactory factory)
+           (throw (ex-info (str "invalid vector in tree, must start with factory, got " (type factory)) {:el el})))
+         (-create-element factory scope children)))
 
   string
-  (construct [el]
+  (-construct [el scope]
     (js/document.createTextNode el))
   
   number
-  (construct [el]
+  (-construct [el scope]
     (js/document.createTextNode (str el))))
 
 ;; BACKWARDS COMPATIBILTY HACK, SHOULD NOT BE USED!
 (extend-protocol IElementFactory
   cljs.core/Keyword
-  (-create-element [kw children]
+  (-create-element [kw scope children]
     (let [[tag id class] (dom/parse-tag kw)]
       (dom-element tag
+                   scope
                    (-> {}
                        (cond->
                         id (assoc :id id)
@@ -362,140 +356,13 @@
 
 (extend-protocol IDynamicElement
   cljs.core/PersistentArrayMap
-  (-insert-element! [this el]
-    (apply-attributes! el this))
+  (-insert-element! [this scope el]
+    (dom/set-attrs el this))
   cljs.core/PersistentHashMap
-  (-insert-element! [this el]
-    (apply-attributes! el this)))
+  (-insert-element! [this scope el]
+    (dom/set-attrs el this)))
 
-;; from https://github.com/swannodette/om/blob/master/src/om/dom.clj
-(sm/define-node-factories
-  [a
-   abbr
-   address
-   area
-   article
-   aside
-   audio
-   b
-   base
-   bdi
-   bdo
-   big
-   blockquote
-   body
-   br
-   button
-   canvas
-   caption
-   cite
-   code
-   col
-   colgroup
-   data
-   datalist
-   dd
-   del
-   dfn
-   div
-   dl
-   dt
-   em
-   embed
-   fieldset
-   figcaption
-   figure
-   footer
-   form
-   h1
-   h2
-   h3
-   h4
-   h5
-   h6
-   head
-   header
-   hr
-   html
-   i
-   iframe
-   img
-   ins
-   kbd
-   keygen
-   label
-   legend
-   li
-   link
-   main
-   map
-   mark
-   marquee
-   menu
-   menuitem
-   meta
-   meter
-   nav
-   noscript
-   object
-   ol
-   optgroup
-   output
-   p
-   param
-   pre
-   progress
-   q
-   rp
-   rt
-   ruby
-   s
-   samp
-   script
-   section
-   select
-   small
-   source
-   span
-   strong
-   style
-   sub
-   summary
-   sup
-   table
-   tbody
-   td
-   tfoot
-   th
-   thead
-   time
-   title
-   tr
-   track
-   u
-   ul
-   var
-   video
-   wbr
-    
-   ;; svg
-   circle
-   ellipse
-   g
-   line
-   path
-   polyline
-   rect
-   svg
-   text
-   defs
-   linearGradient
-   polygon
-   radialGradient
-   stop
-   tspan])
-
-(deftype ComponentInstance [spec scope state ^:mutable dom]
+(deftype ComponentInstance [id type spec scope state ^:mutable dom]
   IScoped
   (-get-scope [_]
     scope)
@@ -508,33 +375,55 @@
   
   IDeref
   (-deref [_]
-    state)
+    @state)
+  
+  IWatchable
+  (-add-watch [_ key callback]
+    (-add-watch state key callback))
+  (-remove-watch [_ key]
+    (-remove-watch state key))
+  
+  IUpdate
+  (-update! [_ update-fn]
+    (swap! state update-fn))
+  
+  ILookup
+  (-lookup [_ key]
+    (get @state key))
+  (-lookup [_ key default]
+    (get @state key default))
 
   dom/IElement
   (-to-dom [_] dom))
 
 (defn fire-event! [obj ev & args]
-  (log "fire-event!" obj ev args))
+  ;; (log "fire-event!" obj ev args)
+  )
 
 (defn mutual-destruction! [scope cmp]
-  (log "mutual destruct" scope cmp))
+  ;; (log "mutual destruct" scope cmp)
+  )
 
 (defn create-instance
-  [spec attr init-fns children]
-  (let [scope (new-scope *scope*)
-        cmp (ComponentInstance. spec scope attr nil)
+  [spec parent-scope attr init-fns children]
+  (let [scope (new-scope parent-scope)
+        id (next-component-id (:name spec))
+        cmp (ComponentInstance. id (:name spec) spec scope (atom attr) nil)
         
         _ (do (mutual-destruction! scope cmp) 
               (fire-event! cmp :init))
 
         dom-fn (:dom spec)
-        dom (binding [*scope* scope]
-              (construct (dom-fn cmp children)))]
+        tree (dom-fn cmp children)
+        ;; _ (log (:name spec) tree)
+        dom (-construct tree scope)]
 
+    (dom/set-data dom :cid id)
     (set! (.-dom cmp) dom)
+    (aset dom "$$owner" cmp)
 
     (doseq [init-fn init-fns]
-      (init-fn dom cmp))
+      (init-fn dom scope cmp))
     
     (fire-event! cmp :dom/init)
 
@@ -544,4 +433,24 @@
   spec)
 
 
+(deftype NodeBuilder [el-factory children]
+  IConstruct
+  (-construct [_ scope]
+    (-create-element el-factory scope children)
+    ))
 
+(defn $
+  ([el]
+     (NodeBuilder. el #js []))
+  ([el c1]
+     (NodeBuilder. el #js [c1]))
+  ([el c1 c2]
+     (NodeBuilder. el #js [c1 c2]))
+  ([el c1 c2 c3]
+     (NodeBuilder. el #js [c1 c2 c3]))
+  ([el c1 c2 c3 c4]
+     (NodeBuilder. el #js [c1 c2 c3 c4]))
+  ([el c1 c2 c3 c4 c5]
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5]))
+  ([el c1 c2 c3 c4 c5 c6]
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6])))

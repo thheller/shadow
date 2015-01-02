@@ -319,8 +319,43 @@
   ([el key] (.getAttribute (dom-node el) (name key)))
   ([el key default] (or (.getAttribute (dom-node el) (name key)) default)))
 
+(defn set-attr* [el key value]
+  ;; basically clone of goog.dom.setProperties, but with keywords
+  (case key
+    :id (set! (.-id el) (str value))
+    :class (set! (.-className el) (str value))
+    :for (set! (.-htmlFor el) value)
+    ;; see goog.dom.DIRECT_ATTRIBUTE_MAP_
+    :cellpadding (.setAttribute el "cellPadding" value)
+    :cellspacing (.setAttribute el "cellSpacing" value)
+    :colspan (.setAttribute el "colSpan" value)
+    :frameborder (.setAttribute el "frameBorder" value)
+    :height (.setAttribute el "height" value)
+    :maxlength (.setAttribute el "maxLength" value)
+    :role (.setAttribute el "role" value)
+    :rowspan (.setAttribute el "rowSpan" value)
+    :type (.setAttribute el "type" value)
+    :usemap (.setAttribute el "useMap" value)
+    :valign (.setAttribute el "vAlign" value)
+    :width (.setAttribute el "width" value)
+    ;; FIXME: support :style maps
+    (let [ks (name key)]
+      (if (or (gstr/startsWith ks "data-")
+              (gstr/startsWith ks "aria-"))
+        (.setAttribute el ks value)
+        (aset el ks value)))))
+
+(defn set-attrs [el attrs]
+  (reduce-kv
+   (fn [el key value]
+     ;; use special version, so we don't do (dom-node el) every time
+     (set-attr* el key value)
+     el)
+   (dom-node el)
+   attrs))
+
 (defn set-attr [el key value]
-  (dom/setProperties (dom-node el) (clj->js {key value})))
+  (set-attr* (dom-node el) key value))
 
 (defn del-attr [el key]
   (.removeAttribute (dom-node el) (name key)))

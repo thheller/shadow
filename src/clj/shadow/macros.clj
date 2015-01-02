@@ -173,4 +173,17 @@
 
 (defmacro define-node-factories [syms]
   `(do ~@(for [sym syms]
-           `(def ~sym (shadow.components/ElementFactory. (partial shadow.components/dom-element ~(str/upper-case (name sym))) {} [])))))
+           `(def ~sym (shadow.components/ElementFactory.
+                       #(shadow.components/dom-element ~(str/upper-case (name sym)) %1 %2 %3 %4)
+                       {}
+                       [])))))
+
+(defmacro with-timing [msg & body]
+  `(let [time?# (aget js/window "console" "time")
+         msg# ~msg]
+     (when time?# 
+       (.time js/console msg#))
+     ~@body
+     (when time?#
+       (.timeEnd js/console msg#))
+     ))
