@@ -247,37 +247,70 @@
   (fn [el scope owner]
     (dom/on el event callback)))
 
-(deftype DynamicElement [observable ctor]
+(deftype DynamicElement [observable opts]
   IDynamicElement
   (-insert-element! [_ scope outer-el]
-    (let [current-el (atom nil)
+    (let [current (atom nil)
+
+          {:keys [key insert replace update remove dom]} opts
 
           callback (fn [action old-val new-val]
-                     (let [old-el @current-el]
-                       (when (and old-el (satisfies? IDestructable old-el))
-                         (destroy! old-el))
-                     
-                       (let [new-def (ctor new-val)
-                             ;; if no node needs to be constructed at this point
-                             ;; just use empty text node as a placeholder
-                             new-el (-construct (if (nil? new-def) "" new-def) scope)]
+                     (let [old-el @current]
 
-                         (reset! current-el new-el)
+                       (if (and old-el key (= (key old-val) (key new-val)))
+                         ;; if the key stays the same don't fully swap the object
+                         (update outer-el old-el old-val new-val)
+                         
+                         (let [new-def (dom new-val)
+                               ;; if no node needs to be constructed at this point
+                               ;; just use empty text node as a placeholder
+                               new-el (-construct (if (nil? new-def) "" new-def) scope)]
 
-                         (if old-el
-                           (dom/replace-node old-el new-el)
-                           (dom/append outer-el new-el))
-                         )))]
+                           (reset! current new-el)
+
+                           (cond
+                            (nil? old-el)
+                            (insert outer-el new-el new-val)
+                            (nil? new-def)
+                            (remove outer-el old-el old-val new-el)
+                            :else
+                            (replace outer-el old-el old-val new-el new-val))))))]
       
       (.execute! (scope-action scope observable callback))
       )))
 
+(def <$-default-opts
+  {:insert (fn [outer-el new-el new-val]
+             (dom/append outer-el new-el))
+   :replace (fn [outer-el old-el old-val new-el new-val]
+              (dom/replace-node old-el new-el)
+              (when (satisfies? IDestructable old-el)
+                (destroy! old-el)))
+   
+   :update (fn [outer-el el old-val new-val]) ;; NO-OP
+
+   :remove (fn [outer-el old-el old-val placeholder]
+             (dom/replace-node old-el placeholder) 
+             (when (satisfies? IDestructable old-el)
+               (destroy! old-el)))
+   :dom (fn [val observable]
+          val)})
+
 (defn <$
   "<$ read as \"at this position in the tree\""
   ([observable]
-     (DynamicElement. observable identity))
-  ([observable ctor]
-     (DynamicElement. observable ctor)))
+     (DynamicElement. observable <$-default-opts))
+  ([observable opts]
+     (let [opts (cond
+                 (map? opts)
+                 (merge <$-default-opts opts)
+                 (fn? opts)
+                 (assoc <$-default-opts :dom (fn [new-val observable]
+                                               (opts new-val)))
+                 :else
+                 (throw (ex-info "invalid argument to dynamic element" {:opts opts})))]
+
+       (DynamicElement. observable opts))))
 
 (defonce root-scope (new-scope nil))
 
@@ -454,4 +487,13 @@
   ([el c1 c2 c3 c4 c5]
      (NodeBuilder. el #js [c1 c2 c3 c4 c5]))
   ([el c1 c2 c3 c4 c5 c6]
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6])))
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6]))
+  ([el c1 c2 c3 c4 c5 c6 c7]
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7]))
+  ([el c1 c2 c3 c4 c5 c6 c7 c8]
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8]))
+  ([el c1 c2 c3 c4 c5 c6 c7 c8 c9]
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
+  ([el c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]
+     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
+  )
