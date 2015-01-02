@@ -103,23 +103,41 @@
 (deftype ElementFactory [el-ctor el-attr el-init]
   IFn
   (-invoke [_ attr]
-    (ElementFactory. el-ctor (merge el-attr attr) el-init))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) el-init)
+      (ElementFactory. el-ctor el-attr (conj el-init attr))))
   (-invoke [_ attr i1]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1))))
   (-invoke [_ attr i1 i2]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2))))
   (-invoke [_ attr i1 i2 i3]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3))))
   (-invoke [_ attr i1 i2 i3 i4]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4))))
   (-invoke [_ attr i1 i2 i3 i4 i5]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5))))
   (-invoke [_ attr i1 i2 i3 i4 i5 i6]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5 i6))))
   (-invoke [_ attr i1 i2 i3 i4 i5 i6 i7]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6 i7)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6 i7))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5 i6 i7))))
   (-invoke [_ attr i1 i2 i3 i4 i5 i6 i7 i8]
-    (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6 i7 i8)))
+    (if (map? attr)
+      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6 i7 i8))
+      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5 i6 i7 i8))))
   ;; FIXME: add more -invoke ...
   
   IDeref
@@ -293,8 +311,7 @@
              (dom/replace-node old-el placeholder) 
              (when (satisfies? IDestructable old-el)
                (destroy! old-el)))
-   :dom (fn [val observable]
-          val)})
+   :dom (fn [val] val)})
 
 (defn <$
   "<$ read as \"at this position in the tree\""
@@ -305,8 +322,7 @@
                  (map? opts)
                  (merge <$-default-opts opts)
                  (fn? opts)
-                 (assoc <$-default-opts :dom (fn [new-val observable]
-                                               (opts new-val)))
+                 (assoc <$-default-opts :dom opts)
                  :else
                  (throw (ex-info "invalid argument to dynamic element" {:opts opts})))]
 

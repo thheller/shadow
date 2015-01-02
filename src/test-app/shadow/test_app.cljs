@@ -38,7 +38,7 @@
 (defc yo
   :on [:init (fn [this]
                (log "called init of yo" this))]
-
+  
   :dom (fn [this _]
          ($ html/div
             ($ html/h1 "hello" (<$ [test-data [:level :i] str]) (<$ [test-data :name]))
@@ -48,37 +48,32 @@
                
                (<$ [test-data :object]
                    {:key :id
-                    :dom (fn [object observable]
+                    :dom (fn [object]
                            (when object
                              ($ (object-display {:object (Cursor. test-data [:object])}))
                              ))})
                
                ($ (html/button 
-                   {}
                    (sc/on :click #(swap! test-data update-in [:level :i] inc)))
                   "inc level")
 
                ($ (html/button
-                   {}
                    (sc/on :click #(swap! test-data assoc :object {:id 1
                                                                   :name "obj1"
                                                                   :i 0})))
                   "swap obj 1") 
 
                ($ (html/button
-                   {}
                    (sc/on :click #(swap! test-data dissoc :object)))
                   "remove obj") 
 
                ($ (html/button
-                   {}
                    (sc/on :click #(swap! test-data assoc :object {:id 2
                                                                   :name "obj2"
                                                                   :i 0})))
                   "swap obj 2")
 
                ($ (html/button
-                   {}
                    (sc/on :click #(swap! test-data update-in [:object :i] inc)))
                   "inc i") 
 
