@@ -35,6 +35,11 @@
             ($ div-title (<$ object object-title))
             (<$ [object :i] str))))
 
+
+(defc toolbar
+  :dom (fn [this children]
+         ($ html/div "toolbar: " children)))
+
 (defc yo
   :on [:init (fn [this]
                (log "called init of yo" this))]
@@ -53,29 +58,32 @@
                              ($ (object-display {:object (Cursor. test-data [:object])}))
                              ))})
                
-               ($ (html/button 
-                   (sc/on :click #(swap! test-data update-in [:level :i] inc)))
-                  "inc level")
+               ($ toolbar
+                  ($ (html/button 
+                      (sc/on :click #(swap! test-data update-in [:level :i] inc)))
+                     "inc level")
 
-               ($ (html/button
-                   (sc/on :click #(swap! test-data assoc :object {:id 1
-                                                                  :name "obj1"
-                                                                  :i 0})))
-                  "swap obj 1") 
+                  ($ (html/button
+                      (sc/on :click #(swap! test-data assoc :object {:id 1
+                                                                     :name "obj1"
+                                                                     :i 0})))
+                     "swap obj 1") 
+                  
+                  
 
-               ($ (html/button
-                   (sc/on :click #(swap! test-data dissoc :object)))
-                  "remove obj") 
+                  ($ (html/button
+                      (sc/on :click #(swap! test-data dissoc :object)))
+                     "remove obj") 
 
-               ($ (html/button
-                   (sc/on :click #(swap! test-data assoc :object {:id 2
-                                                                  :name "obj2"
-                                                                  :i 0})))
-                  "swap obj 2")
+                  ($ (html/button
+                      (sc/on :click #(swap! test-data assoc :object {:id 2
+                                                                     :name "obj2"
+                                                                     :i 0})))
+                     "swap obj 2")
 
-               ($ (html/button
-                   (sc/on :click #(swap! test-data update-in [:object :i] inc)))
-                  "inc i") 
+                  ($ (html/button
+                      (sc/on :click #(swap! test-data update-in [:object :i] inc)))
+                     "inc i")) 
 
  
                ))))

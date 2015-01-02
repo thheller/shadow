@@ -27,7 +27,7 @@
 (defprotocol IScoped
   (-get-scope [this]))
 
-(defprotocol IDestructable
+(defprotocol IDestruct
   (destroy! [this]))
 
 (defprotocol IUpdate
@@ -71,6 +71,9 @@
          (do (-insert-element! it scope parent)
              (recur more))
          
+         (array? it)
+         (recur (concat it more))
+
          :else
          (let [el (-construct it scope)]
            (dom/append parent el)
@@ -102,6 +105,8 @@
 
 (deftype ElementFactory [el-ctor el-attr el-init]
   IFn
+  (-invoke [this]
+    this)
   (-invoke [_ attr]
     (if (map? attr)
       (ElementFactory. el-ctor (merge el-attr attr) el-init)
@@ -159,9 +164,10 @@
        (remove #(= filter-id (.-id %)))
        (into [])))
 
+;; naming things is hard, Scope and ScopeAction suck!
 (deftype Scope [id ^:mutable alive? actions children]
 
-  IDestructable
+  IDestruct
   (destroy! [this]
     (set! alive? false)
     (doseq [[_ child] @children]
@@ -195,7 +201,7 @@
           (.do! this old-val new-val)
           ))))
   
-  IDestructable
+  IDestruct
   (destroy! [this]
     (set! alive? false)
     (.removeAction scope this))
@@ -218,7 +224,7 @@
   (-get-scope [_]
     scope)
 
-  IDestructable
+  IDestruct
   (destroy! [_]
     (dom/remove el)
     (destroy! scope))
@@ -302,14 +308,14 @@
              (dom/append outer-el new-el))
    :replace (fn [outer-el old-el old-val new-el new-val]
               (dom/replace-node old-el new-el)
-              (when (satisfies? IDestructable old-el)
+              (when (satisfies? IDestruct old-el)
                 (destroy! old-el)))
    
    :update (fn [outer-el el old-val new-val]) ;; NO-OP
 
    :remove (fn [outer-el old-el old-val placeholder]
              (dom/replace-node old-el placeholder) 
-             (when (satisfies? IDestructable old-el)
+             (when (satisfies? IDestruct old-el)
                (destroy! old-el)))
    :dom (fn [val] val)})
 
@@ -417,7 +423,7 @@
   (-get-scope [_]
     scope)
 
-  IDestructable
+  IDestruct
   (destroy! [_]
     (when dom
       (dom/remove dom))
@@ -489,27 +495,42 @@
     (-create-element el-factory scope children)
     ))
 
+(defn check-el [el]
+  (when-not (satisfies? IElementFactory el)
+    (throw (ex-info "invalid element, must start with element factory" {:el el}))))
+
 (defn $
   ([el]
+     (check-el el)
      (NodeBuilder. el #js []))
   ([el c1]
+     (check-el el)
      (NodeBuilder. el #js [c1]))
   ([el c1 c2]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2]))
   ([el c1 c2 c3]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3]))
   ([el c1 c2 c3 c4]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4]))
   ([el c1 c2 c3 c4 c5]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4 c5]))
   ([el c1 c2 c3 c4 c5 c6]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6]))
   ([el c1 c2 c3 c4 c5 c6 c7]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7]))
   ([el c1 c2 c3 c4 c5 c6 c7 c8]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8]))
   ([el c1 c2 c3 c4 c5 c6 c7 c8 c9]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
   ([el c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]
+     (check-el el)
      (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
   )
