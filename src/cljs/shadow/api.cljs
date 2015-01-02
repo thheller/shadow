@@ -1,9 +1,9 @@
 (ns shadow.api
-  (:require-macros [shadow.macros :refer (log)])
+  {:load-macros true}
   (:require [cljs.reader :as reader]
-            [shadow.object :as so]
             [shadow.dom :as dom]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [shadow.util :as util :refer (log)]))
 
 (defn run-script-tag
   "a <script type=\"shadow/run\" data-fn=\"js-fn\">edn-args</script> tag is meant to embed calls to javascript in html
@@ -49,7 +49,7 @@
             :when (contains? @available-namespaces fn-ns)]
       (run-script-tag script)))
 
-(defn ^:export ns-ready [ns-name]
+(defn ^:export ns-ready* [ns-name]
   (log "ns-ready" ns-name)
   (swap! available-namespaces conj ns-name)
   (let [ns-name (str/replace ns-name #"-" "_")]

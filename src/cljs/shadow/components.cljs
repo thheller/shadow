@@ -1,9 +1,10 @@
 (ns shadow.components
-  (:require-macros [shadow.macros :as sm :refer (log)]
-                   [shadow.components :as sc])
+  {:load-macros true}
+  (:require-macros [shadow.components :as sc])
   (:require [clojure.string :as str]
             [goog.string :as gstr]
             [shadow.object :as so]
+            [shadow.util :as util :refer (log)]
             [shadow.dom :as dom]))
 
 (def next-id

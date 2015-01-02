@@ -1,6 +1,7 @@
 (ns shadow.test-app
-  (:require-macros [shadow.macros :refer (log ns-ready with-timing)])
-  (:require [shadow.components :as c :refer ($ <$ defc) :refer-macros (defc)]
+  (:require [shadow.components :as c :refer ($ <$ defc)]
+            [shadow.util :as util :refer (log with-timing)]
+            [shadow.api :as api :refer (ns-ready)]
             [shadow.html :as html]
             [shadow.dom :as dom]))
 
