@@ -1,11 +1,11 @@
 (ns shadow.ui
-  (:require-macros [shadow.macros :refer (log)])
   (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
             [shadow.dom :as dom]
             [goog.dom.forms :as gf]
             [clojure.string :as str]
             [cljs.reader :as reader]
+            [shadow.util :as util :refer (log)]
             ))
 
 (defn as-path [k]

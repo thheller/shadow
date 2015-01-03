@@ -164,15 +164,45 @@
        (remove #(= filter-id (.-id %)))
        (into [])))
 
+;; RENDER
+;; FIXME: processing does not always need to start at root scope
+;; the watch should instead add its scope to the list of scopes needing an update
+;; on render we should then sort those and only render the ones that require an update
+;; sorting parents before children is important
+
+(def render-queued (atom false))
+
+(defn frame-fn []
+  (let [start (.getTime (js/Date.))]
+    (reset! render-queued false)
+    (process-frame! root-scope)
+    (let [frame-time (- (.getTime (js/Date.)) start)]
+      (when (> frame-time 16)
+        (log "LONG FRAME TIME!" frame-time))
+      )))
+
+(defn add-trigger! [scope key root]
+  (add-watch root key (fn [_ _ _ _]
+                        (when-not @render-queued
+                          (reset! render-queued true)
+                          (js/window.requestAnimationFrame frame-fn)))))
+
+(defn remove-trigger! [scope key root]
+  (remove-watch root key))
+
+;; /RENDER
+
+
 ;; naming things is hard, Scope and ScopeAction suck!
 (deftype Scope [id ^:mutable alive? actions children]
 
   IDestruct
   (destroy! [this]
-    (set! alive? false)
-    (doseq [[_ child] @children]
-      (destroy! child)
-      ))
+    (when alive?
+      (set! alive? false)
+      (doseq [child @children]
+        (destroy! child)
+        )))
 
   IFramed
   (process-frame! [this]
@@ -196,15 +226,15 @@
     (when (and (.-alive? scope) alive?)
       (let [old-val @val
             new-val (-pull! observable)]
-        (when (and (not (identical? old-val new-val))
-                   (not= old-val new-val))
+        (when (not= old-val new-val)
           (.do! this old-val new-val)
           ))))
   
   IDestruct
   (destroy! [this]
-    (set! alive? false)
-    (.removeAction scope this))
+    (when alive?
+      (set! alive? false)
+      (.removeAction scope this)))
   
   Object
   (execute! [this]
@@ -218,19 +248,6 @@
   (let [action (ScopeAction. (next-id) true scope (atom nil) observable callback)]
     (.addAction scope action)
     action))
-
-(deftype ScopedElement [scope el]
-  IScoped
-  (-get-scope [_]
-    scope)
-
-  IDestruct
-  (destroy! [_]
-    (dom/remove el)
-    (destroy! scope))
-
-  dom/IElement
-  (-to-dom [_] el))
 
 (def next-scope-id
   (let [id (atom 0)]
@@ -418,16 +435,21 @@
   (-insert-element! [this scope el]
     (dom/set-attrs el this)))
 
-(deftype Instance [id type spec scope state ^:mutable dom]
+(deftype Instance [id type spec scope state triggers ^:mutable dom ^:mutable alive?]
   IScoped
   (-get-scope [_]
     scope)
 
   IDestruct
-  (destroy! [_]
-    (when dom
-      (dom/remove dom))
-    (destroy! scope))
+  (destroy! [this]
+    (when alive?
+      (set! alive? false)
+      (remove-trigger! scope id this)
+      (doseq [trigger @triggers]
+        (remove-trigger! scope id trigger))
+      (when dom
+        (dom/remove dom))
+      (destroy! scope)))
   
   IDeref
   (-deref [_]
@@ -466,7 +488,8 @@
   [spec parent-scope attr init-fns children]
   (let [scope (new-scope parent-scope)
         id (next-component-id (:name spec))
-        cmp (Instance. id (:name spec) spec scope (atom attr) nil)
+        triggers (atom [])
+        cmp (Instance. id (:name spec) spec scope (atom attr) triggers nil true)
         
         _ (do (mutual-destruction! scope cmp) 
               (notify! cmp :init))
@@ -482,6 +505,14 @@
 
     (doseq [init-fn init-fns]
       (init-fn dom scope cmp))
+    
+    (add-trigger! scope id cmp)
+    (doseq [trigger (:triggers spec [])
+            :let [trigger (if (satisfies? IWatchable trigger)
+                            trigger
+                            (trigger cmp))]]
+      (swap! triggers conj trigger)
+      (add-trigger! scope id trigger))
     
     (notify! cmp :dom/init (dom/dom-node dom))
 

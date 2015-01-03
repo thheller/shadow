@@ -26,15 +26,21 @@
     (get-in @root path))
   IDeref
   (-deref [_]
-    (get-in @root path)))
+    (get-in @root path))
+  IWatchable
+  (-add-watch [this key callback]
+    (-add-watch root key callback))
+  (-remove-watch [this key]
+    (-remove-watch root key)))
 
 (defc object-display
+  :triggers [:object]
+
   :dom (fn [{:keys [object] :as this} _]
          ($ html/div
             ($ html/h2 "OBJECT!")
             ($ div-title (<$ object object-title))
             (<$ [object :i] str))))
-
 
 (defc toolbar
   :dom (fn [this children]
@@ -47,6 +53,8 @@
        :dom/init (fn [this el]
                    (log "dom/init" el))]
   
+  :triggers [test-data]
+  
   :dom (fn [this _]
          ($ html/div
             ($ html/h1
@@ -56,6 +64,7 @@
 
             ($ html/div
                "yo"
+
                (<$ [test-data [:level :i]] str)
                
                (<$ [test-data :object]
@@ -95,42 +104,16 @@
  
                ))))
 
-(def render-queued (atom false))
-
-(defn frame-fn []
-  (let [start (.getTime (js/Date.))]
-    (reset! render-queued false)
-    (sc/process-frame! sc/root-scope)
-    (let [frame-time (- (.getTime (js/Date.)) start)]
-      (when (> frame-time 16)
-        (log "LONG FRAME TIME!" frame-time))
-      )))
-
-(defn start-frames! [key root]
-  (add-watch root key (fn [_ _ _ _]
-                        (when-not @render-queued
-                          (reset! render-queued true)
-                          (js/window.requestAnimationFrame frame-fn)))))
-
-(defn stop-frames! [key root]
-  (remove-watch root key))
-
 (defn ^:export start [ref]
   (log "START")
-  (start-frames! :my-app test-data)
   
   (let [root (sc/construct yo)]
     (reset! root-c root)
-    (dom/insert-before ref root))
-
-  )
-
-
+    (dom/insert-before ref root)))
 
 (defn ^:export stop []
   (log "STOP")
-  
-  (stop-frames! :my-app test-data)
+
   (when-let [r @root-c]
     (sc/destroy! r)
     (reset! root-c nil)))

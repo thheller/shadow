@@ -1,6 +1,5 @@
 (ns shadow.xhr
   "FIXME: rewrite to using promises, since closure is deprecating result"
-  (:require-macros [shadow.macros :refer (log)])
   (:require [goog.result :as gresult]
             goog.result.SimpleResult
             [goog.labs.net.xhr :as gxhr]
@@ -11,6 +10,7 @@
             [shadow.dom :as dom]
             [cljs.core.async :as async]
             [clojure.string :as str]
+            [shadow.util :as util :refer (log)]
             ))
 
 (defn result-chain [res handler]

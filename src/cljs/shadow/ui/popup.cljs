@@ -1,9 +1,10 @@
 (ns shadow.ui.popup
-  (:require-macros [shadow.macros :refer (log)])
   (:require [shadow.object :as so]
             [shadow.keyboard :as kb]
             [shadow.dom :as dom]
-            [shadow.ui :as ui]))
+            [shadow.ui :as ui]
+            [shadow.util :as util :refer (log)]
+            ))
 
 (so/define-event :popup-closing "" [])
 (so/define-event :popup-closed "" [])
