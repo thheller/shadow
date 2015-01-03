@@ -550,9 +550,6 @@
     [item]
     (conj v item)))
 
-(defn optimize-spec [spec]
-  spec)
-
 (deftype NodeBuilder [el-factory children]
   IConstruct
   (-construct [_ scope]
