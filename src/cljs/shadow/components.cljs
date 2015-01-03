@@ -545,10 +545,12 @@
     
     cmp))
 
-(defn conjv [v item]
-  (if (nil? v)
-    [item]
-    (conj v item)))
+(defn return-and-destroy! [cmp ret-val]
+  (when-not (instance? Instance cmp)
+    (throw (ex-info "only component instances know how to return values" {:cmp cmp})))
+  (set! (.-ret-val cmp) ret-val)
+  (destroy! cmp))
+
 
 (deftype NodeBuilder [el-factory children]
   IConstruct
