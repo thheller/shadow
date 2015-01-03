@@ -74,7 +74,10 @@
                              ($ (object-display {:object (Cursor. test-data [:object])}))
                              ))})
                
-               ($ toolbar
+               ($ (toolbar
+                   #_ (sc/recv :some-action (fn [& args]
+                                              (log "toolbar action" e el))))
+
                   ($ (html/button 
                       (sc/on :click #(swap! test-data update-in [:level :i] inc)))
                      "inc level")

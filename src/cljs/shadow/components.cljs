@@ -194,12 +194,14 @@
 
 
 ;; naming things is hard, Scope and ScopeAction suck!
-(deftype Scope [id ^:mutable alive? actions children]
+(deftype Scope [id ^:mutable alive? ^:mutable owner actions children]
 
   IDestruct
   (destroy! [this]
     (when alive?
       (set! alive? false)
+      (when owner
+        (destroy! owner))
       (doseq [child @children]
         (destroy! child)
         )))
@@ -263,6 +265,7 @@
   [parent]
   (let [scope (Scope. (next-scope-id)
                       true
+                      nil
                       (atom [])
                       (atom []))]
     (when parent
@@ -449,6 +452,7 @@
         (remove-trigger! scope id trigger))
       (when dom
         (dom/remove dom))
+      (set! (.-owner scope) nil)
       (destroy! scope)))
   
   IDeref
@@ -491,7 +495,8 @@
         triggers (atom [])
         cmp (Instance. id (:name spec) spec scope (atom attr) triggers nil true)
         
-        _ (do (mutual-destruction! scope cmp) 
+        ;; FIXME: maybe combine Scope+Instance?
+        _ (do (set! (.-owner scope) cmp)
               (notify! cmp :init))
 
         dom-fn (:dom spec)
@@ -515,7 +520,6 @@
       (add-trigger! scope id trigger))
     
     (notify! cmp :dom/init (dom/dom-node dom))
-
     cmp))
 
 (defn conjv [v item]
