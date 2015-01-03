@@ -3,6 +3,8 @@
   (:require-macros [shadow.components :as sc])
   (:require [clojure.string :as str]
             [goog.string :as gstr]
+            [cljs.core.async :as async]
+            [cljs.core.async.impl.protocols :as async-protocols]
             [shadow.object :as so]
             [shadow.util :as util :refer (log)]
             [shadow.dom :as dom]))
@@ -81,23 +83,21 @@
            ))))))
 
 
-
-(def childless
-  #{"IMG"
-    "INPUT"})
+;; FIXME: do this correctly or not at all.
+#_ (def childless #{"IMG" "INPUT"})
 
 (defn dom-element [tag scope attrs init-fns children]
-  (when (and (contains? childless tag)
-             (seq children))
-    (throw (ex-info (str tag " cannot have children, yet we got some") {:tag tag
-                                                                        :attrs attrs
-                                                                        :children children})))
+  #_ (when (and (contains? childless tag)
+                (seq children))
+       (throw (ex-info (str tag " cannot have children, yet we got some") {:tag tag
+                                                                           :attrs attrs
+                                                                           :children children})))
   
   (let [el (js/document.createElement tag)]
     (dom/set-attrs el attrs)
 
     (doseq [init-fn init-fns]
-      (init-fn el scope nil))
+      (init-fn el scope))
 
     (expand-children! el scope children)
     el
@@ -438,7 +438,17 @@
   (-insert-element! [this scope el]
     (dom/set-attrs el this)))
 
-(deftype Instance [id type spec scope state triggers ^:mutable dom ^:mutable alive?]
+(deftype Instance
+    [id
+     type
+     spec
+     scope
+     chan
+     ^:mutable ret-val
+     state ;; local state
+     triggers ;; Observables that trigger an update of this instance
+     ^:mutable dom
+     ^:mutable alive?]
   IScoped
   (-get-scope [_]
     scope)
@@ -447,13 +457,22 @@
   (destroy! [this]
     (when alive?
       (set! alive? false)
+
       (remove-trigger! scope id this)
       (doseq [trigger @triggers]
         (remove-trigger! scope id trigger))
+
+      (set! (.-owner scope) nil)
+      (destroy! scope)
+      
+      ;; FIXME: should we remove dom first?
+      (when ret-val
+        (async/put! chan ret-val))
+      (async/close! chan)
+
       (when dom
         (dom/remove dom))
-      (set! (.-owner scope) nil)
-      (destroy! scope)))
+      ))
   
   IDeref
   (-deref [_]
@@ -476,28 +495,30 @@
     (get @state key default))
 
   dom/IElement
-  (-to-dom [_] dom))
+  (-to-dom [_] dom)
 
-(defn notify! [component ev & args]
-  (let [spec (.-spec component)
-        ev-handlers (get-in spec [:on ev])]
-    (doseq [ev-handler ev-handlers]
-      (apply ev-handler component args))))
+  async-protocols/ReadPort
+  (take! [_ fn1-handler]
+    (async-protocols/take! chan fn1-handler)))
 
-(defn mutual-destruction! [scope cmp]
-  ;; (log "mutual destruct" scope cmp)
-  )
 
 (defn create-instance
   [spec parent-scope attr init-fns children]
   (let [scope (new-scope parent-scope)
         id (next-component-id (:name spec))
         triggers (atom [])
-        cmp (Instance. id (:name spec) spec scope (atom attr) triggers nil true)
+        
+        ;; FIXME: change to promise-chan when we get them!
+        ;; there may be many other instances waiting for our death
+        ;; all should get the return val, not just one lucky one
+        chan (async/chan 1)
+        
+        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) triggers nil true)
         
         ;; FIXME: maybe combine Scope+Instance?
         _ (do (set! (.-owner scope) cmp)
-              (notify! cmp :init))
+              (when-let [init-fn (:init spec)]
+                (init-fn cmp)))
 
         dom-fn (:dom spec)
         tree (dom-fn cmp children)
@@ -509,8 +530,11 @@
     (aset dom "$$owner" cmp)
 
     (doseq [init-fn init-fns]
-      (init-fn dom scope cmp))
+      (init-fn cmp scope))
     
+    (when-let [init-fn (:dom/init spec)]
+      (init-fn cmp (dom/dom-node dom)))
+
     (add-trigger! scope id cmp)
     (doseq [trigger (:triggers spec [])
             :let [trigger (if (satisfies? IWatchable trigger)
@@ -519,7 +543,6 @@
       (swap! triggers conj trigger)
       (add-trigger! scope id trigger))
     
-    (notify! cmp :dom/init (dom/dom-node dom))
     cmp))
 
 (defn conjv [v item]
@@ -527,16 +550,8 @@
     [item]
     (conj v item)))
 
-(defn optimize-spec [{:keys [on] :as spec}]
-  (assoc spec :on (->> on
-                       (partition 2)
-                       (reduce (fn [on [ev handler :as entry]]
-                                 (when-not (and (keyword ev)
-                                                (fn? handler))
-                                   (throw (ex-info "invalid component :on entry" {:entry entry})))
-                                 (update-in on [ev] conjv handler))
-                               {}))))
-
+(defn optimize-spec [spec]
+  spec)
 
 (deftype NodeBuilder [el-factory children]
   IConstruct

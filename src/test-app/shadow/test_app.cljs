@@ -1,9 +1,12 @@
 (ns shadow.test-app
-  (:require [shadow.components :as sc :refer ($ <$ defc)]
+  (:require-macros [cljs.core.async.macros :refer (go)])
+  (:require [cljs.core.async :as async]
+            [shadow.components :as sc :refer ($ <$ defc)]
             [shadow.util :as util :refer (log with-timing)]
             [shadow.api :as api :refer (ns-ready)]
             [shadow.html :as html]
-            [shadow.dom :as dom]))
+            [shadow.dom :as dom]
+            ))
 
 (def test-data (atom {:name "Thomas"
                       :level {:i 0}}))
@@ -47,13 +50,11 @@
          ($ html/div "toolbar: " children)))
 
 (defc yo
-  :on [:init (fn [this]
-               (log "called init of yo" this))
-
-       :dom/init (fn [this el]
-                   (log "dom/init" el))]
-  
   :triggers [test-data]
+  
+  :init (fn [this])
+
+  :dom/init (fn [this el])
   
   :dom (fn [this _]
          ($ html/div
@@ -71,12 +72,19 @@
                    {:key :id
                     :dom (fn [object]
                            (when object
-                             ($ (object-display {:object (Cursor. test-data [:object])}))
+                             ($ (object-display {:object (Cursor. test-data [:object])}
+                                                (fn [el scope]
+                                                  (go (let [ret-val (<! el)]
+                                                        (log "object display died" ret-val))))
+
+                                                (fn [el scope]
+                                                  (sc/update! this assoc-in [:refs :display] el))))
                              ))})
                
                ($ (toolbar
-                   #_ (sc/recv :some-action (fn [& args]
-                                              (log "toolbar action" e el))))
+                   #_ (sc/tap [:channels :select] chan or (fn [toolbar msg mult ch]))
+                   #_ (sc/pipe [:channels :select] chan or (fn [toolbar msg ch]))
+                   )
 
                   ($ (html/button 
                       (sc/on :click #(swap! test-data update-in [:level :i] inc)))
@@ -101,7 +109,11 @@
                      "swap obj 2")
 
                   ($ (html/button
-                      (sc/on :click #(swap! test-data update-in [:object :i] inc)))
+                      (sc/on :click (fn [e el]
+                                      (let [ref (get-in this [:refs :display])]
+                                        (log "inc i" ref)
+                                        (when ref
+                                          (swap! test-data update-in [:object :i] inc))))))
                      "inc i")) 
 
  
