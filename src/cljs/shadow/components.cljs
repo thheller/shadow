@@ -253,7 +253,7 @@
     scope
     ))
 
-(defn $bind
+(defn bind
   "whenever the observable value changes, do (callback el new-value)
    where el is the current dom element"
   [observable outer-callback]
@@ -264,8 +264,8 @@
       (.execute! (scope-action scope observable callback))
       )))
 
-(defn $bind-attr [attr observable callback]
-  ($bind observable (fn [el new-value] (dom/set-attr el attr (callback new-value)))))
+(defn bind-attr [attr observable callback]
+  (bind observable (fn [el new-value] (dom/set-attr el attr (callback new-value)))))
 
 (defn on [event callback]
   (fn [el scope owner]
@@ -418,7 +418,7 @@
   (-insert-element! [this scope el]
     (dom/set-attrs el this)))
 
-(deftype ComponentInstance [id type spec scope state ^:mutable dom]
+(deftype Instance [id type spec scope state ^:mutable dom]
   IScoped
   (-get-scope [_]
     scope)
@@ -452,9 +452,11 @@
   dom/IElement
   (-to-dom [_] dom))
 
-(defn fire-event! [obj ev & args]
-  ;; (log "fire-event!" obj ev args)
-  )
+(defn notify! [component ev & args]
+  (let [spec (.-spec component)
+        ev-handlers (get-in spec [:on ev])]
+    (doseq [ev-handler ev-handlers]
+      (apply ev-handler component args))))
 
 (defn mutual-destruction! [scope cmp]
   ;; (log "mutual destruct" scope cmp)
@@ -464,10 +466,10 @@
   [spec parent-scope attr init-fns children]
   (let [scope (new-scope parent-scope)
         id (next-component-id (:name spec))
-        cmp (ComponentInstance. id (:name spec) spec scope (atom attr) nil)
+        cmp (Instance. id (:name spec) spec scope (atom attr) nil)
         
         _ (do (mutual-destruction! scope cmp) 
-              (fire-event! cmp :init))
+              (notify! cmp :init))
 
         dom-fn (:dom spec)
         tree (dom-fn cmp children)
@@ -481,12 +483,24 @@
     (doseq [init-fn init-fns]
       (init-fn dom scope cmp))
     
-    (fire-event! cmp :dom/init)
+    (notify! cmp :dom/init (dom/dom-node dom))
 
     cmp))
 
-(defn optimize-spec [spec]
-  spec)
+(defn conjv [v item]
+  (if (nil? v)
+    [item]
+    (conj v item)))
+
+(defn optimize-spec [{:keys [on] :as spec}]
+  (assoc spec :on (->> on
+                       (partition 2)
+                       (reduce (fn [on [ev handler :as entry]]
+                                 (when-not (and (keyword ev)
+                                                (fn? handler))
+                                   (throw (ex-info "invalid component :on entry" {:entry entry})))
+                                 (update-in on [ev] conjv handler))
+                               {}))))
 
 
 (deftype NodeBuilder [el-factory children]

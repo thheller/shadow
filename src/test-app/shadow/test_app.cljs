@@ -42,12 +42,19 @@
 
 (defc yo
   :on [:init (fn [this]
-               (log "called init of yo" this))]
+               (log "called init of yo" this))
+
+       :dom/init (fn [this el]
+                   (log "dom/init" el))]
   
   :dom (fn [this _]
          ($ html/div
-            ($ html/h1 "hello" (<$ [test-data [:level :i] str]) (<$ [test-data :name]))
-            ($ html/p
+            ($ html/h1
+               "hello"
+               (<$ [test-data [:level :i] str])
+               (<$ [test-data :name]))
+
+            ($ html/div
                "yo"
                (<$ [test-data [:level :i]] str)
                
