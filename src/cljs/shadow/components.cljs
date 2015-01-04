@@ -416,12 +416,12 @@
       (get @source key))))
 
 (extend-protocol IConstruct
-  #_ cljs.core/PersistentVector
-  #_ (-construct [el scope]
-       (let [[factory & children] el]
-         (when-not (satisfies? IElementFactory factory)
-           (throw (ex-info (str "invalid vector in tree, must start with factory, got " (type factory)) {:el el})))
-         (-create-element factory scope children)))
+  cljs.core/PersistentVector
+  (-construct [el scope]
+    (let [[factory & children] el]
+      (when-not (satisfies? IElementFactory factory)
+        (throw (ex-info (str "invalid vector in tree, must start with factory, got " (type factory)) {:el el})))
+      (-create-element factory scope children)))
 
   string
   (-construct [el scope]
