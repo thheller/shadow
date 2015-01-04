@@ -446,6 +446,12 @@
                                   ""
                                   v)))))
 
+(defn px [value]
+  (str value "px"))
+
+(defn pct [value]
+  (str value "%"))
+
 (defn remove-style [el style]
   (.removeProperty (.-style el) (name style)))
 

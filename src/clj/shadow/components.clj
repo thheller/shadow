@@ -6,7 +6,6 @@
     `(def ~name
        (shadow.components/ElementFactory. #(create-instance ~spec %1 %2 %3 %4) {} []))))
 
-
 (defmacro $for [bindings body]
   `(let [items# (cljs.core/array)]
      (doseq ~bindings

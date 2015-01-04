@@ -7,6 +7,8 @@
             [shadow.html :as html]
             [shadow.dom :as dom]
             [shadow.animate :as anim]
+            [shadow.material.toast :as toast]
+            [shadow.material.ripple :as ripple]
             ))
 
 (def test-data (atom {:name "Thomas"
@@ -50,37 +52,6 @@
   :dom (fn [this children]
          ($ html/div "toolbar: " children)))
 
-(defc toast
-  :dom/init (fn [this dom]
-              (dom/on dom :click #(sc/destroy! this)))
-
-  :dom (fn [this children]
-         ($ (html/div {:class "my-toast"}) children)))
-
-;; FIXME: currently toasts can overlap each other, should instead queue after each other
-(defn display-toast
-  [parent
-   {:keys [timeout]
-    :or {timeout 3000}
-    :as attr}
-   & body]
-  (let [toast (sc/construct parent ($ (toast attr) body))
-        slide-in (anim/setup 80 {toast (anim/combine
-                                        (anim/transition :transform "translateY(100%)" "translateY(0)" "ease-in-out")
-                                        (anim/fade-in "ease-in-out"))})]
-
-    (anim/init! slide-in)
-    (dom/append toast) 
-    (anim/continue! slide-in)
-
-    (let [timeout (async/timeout timeout)]
-      (go (alt!
-            toast
-            ([_] :toast-died)
-            ;; if toast is still alive, we remove it
-            timeout
-            ([_] (sc/destroy! toast))
-            )))))
 
 (defc yo
   :triggers [test-data]
@@ -120,13 +91,17 @@
                    )
 
                   ($ (html/button
+                      (ripple/for-element this)
                       (sc/on :click (fn [e el]
-                                      (display-toast this {} "hello world"))))
+                                      
+                                      (toast/display this {} "hello world"))))
                      "toast")
                   
 
                   ($ (html/button 
-                      (sc/on :click #(swap! test-data update-in [:level :i] inc)))
+                      (ripple/for-element this)
+                      (sc/on :click (fn [e el]
+                                      (swap! test-data update-in [:level :i] inc))))
                      "inc level")
 
                   ($ (html/button
@@ -148,9 +123,9 @@
                      "swap obj 2")
 
                   ($ (html/button
+                      (ripple/for-element this)
                       (sc/on :click (fn [e el]
                                       (let [ref (get-in this [:refs :display])]
-                                        (log "inc i" ref)
                                         (when ref
                                           (swap! test-data update-in [:object :i] inc))))))
                      "inc i")) 
@@ -165,7 +140,7 @@
     (reset! root-c root)
     (dom/insert-before ref root)
     
-    (display-toast root {} ($ html/h2 "Welcome!"))))
+    (toast/display root {} ($ html/h2 "Welcome!"))))
 
 (defn ^:export stop []
   (log "STOP")

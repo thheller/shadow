@@ -260,7 +260,8 @@
 
 (defn on [event callback]
   (fn [el scope owner]
-    (dom/on el event callback)))
+    (dom/on el event (fn [e el]
+                       (callback e el scope owner)))))
 
 (deftype DynamicElement [observable opts]
   IDynamicElement
