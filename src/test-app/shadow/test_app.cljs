@@ -11,16 +11,8 @@
             [shadow.material.ripple :as ripple]
             ))
 
-(def test-data (atom {:name "Thomas"
-                      :level {:i 0}}))
 
-(def root-c (atom nil))
 
-(def my-h1
-  (html/h1 {:class "special"}))
-
-(def div-title
-  (html/div {:class "title"}))
 
 (defn object-title
   [{:keys [id name] :as object}]
@@ -39,6 +31,16 @@
   (-remove-watch [this key]
     (-remove-watch root key)))
 
+(def div-title
+  (html/div {:class "title"}))
+
+(def div-form-group
+  (html/div {:class "form-group"}))
+
+(def btn-default
+  (html/button {:type "button" :class "btn btn-default"}))
+
+
 (defc object-display
   :triggers [:object]
 
@@ -48,95 +50,122 @@
             ($ div-title (<$ object object-title))
             (<$ [object :i] str))))
 
-(defc toolbar
-  :dom (fn [this children]
-         ($ html/div "toolbar: " children)))
+(defn inc-clicks [data e el]
+  (swap! data update :clicks inc))
 
+(defn clicks-text [clicks]
+  (cond
+   (zero? clicks)
+   "No clicks? :("
 
-(defc yo
-  :triggers [test-data]
+   (= clicks 1)
+   "Only once?"
+
+   (< clicks 25)
+   (str clicks " Clicks!")
+   
+   :else
+   (str clicks " Clicks! Sir Click-A-Lot!")
+   ))
+
+(defc test-component
+  :triggers [:data]
   
   :init (fn [this])
 
   :dom/init (fn [this el])
   
-  :dom (fn [this _]
+  :dom (fn [{:keys [data] :as this} _]
          ($ html/div
             ($ html/h1
-               "hello"
-               (<$ [test-data [:level :i] str])
-               (<$ [test-data :name]))
+               "Hello "
+               (<$ [data :name] (fn [value]
+                                  (if (seq value)
+                                    value
+                                    "Stranger")))
+               "!")
+            
+            ($ html/form
 
+               ($ div-form-group
+                  ($ html/label "What is your name?")
+
+                  (html/input
+                   {:class "form-control" :placeholder "..." :autofocus true}
+                   (sc/on :keyup (fn [e el]
+                                   (swap! data assoc :name (dom/get-value el))))))
+               ($ div-form-group
+                  ($ (btn-default
+                      (ripple/for-element this)
+                      (sc/on :click (partial inc-clicks data)))
+                     "Click me, I do Stuff!"))
+
+               ($ div-form-group
+                  (<$ [data :clicks] clicks-text)))
+
+            
+            
             ($ html/div
-               "yo"
 
-               (<$ [test-data [:level :i]] str)
+               ($ (btn-default
+                   (ripple/for-element this)
+                   (sc/on :click (fn [e el]
+                                   (toast/display this {} "Hello World!"))))
+                  "toast") 
+
+               ($ (btn-default
+                   (ripple/for-element this)
+                   (sc/on :click #(swap! data assoc :object {:id 1
+                                                             :name "obj1"
+                                                             :i 0})))
+                  "swap obj 1") 
                
-               (<$ [test-data :object]
-                   {:key :id
-                    :dom (fn [object]
-                           (when object
-                             ($ (object-display {:object (Cursor. test-data [:object])}
-                                                (fn [el scope]
-                                                  (go (let [ret-val (<! el)]
-                                                        (log "object display died" ret-val))))
-
-                                                (fn [el scope]
-                                                  (sc/update! this assoc-in [:refs :display] el))))
-                             ))})
                
-               ($ (toolbar
-                   #_ (sc/tap [:channels :select] chan or (fn [toolbar msg mult ch]))
-                   #_ (sc/pipe [:channels :select] chan or (fn [toolbar msg ch]))
-                   )
+               ($ (btn-default
+                   (ripple/for-element this)
+                   (sc/on :click #(swap! data assoc :object {:id 2
+                                                             :name "obj2"
+                                                             :i 0})))
+                  "swap obj 2")
 
-                  ($ (html/button
-                      (ripple/for-element this)
-                      (sc/on :click (fn [e el]
-                                      
-                                      (toast/display this {} "hello world"))))
-                     "toast")
-                  
+               ($ (btn-default
+                   (ripple/for-element this)
+                   (sc/on :click (fn [e el]
+                                   (let [ref (get-in this [:refs :display])]
+                                     (when ref
+                                       (swap! data update-in [:object :i] inc))))))
+                  "inc i")
 
-                  ($ (html/button 
-                      (ripple/for-element this)
-                      (sc/on :click (fn [e el]
-                                      (swap! test-data update-in [:level :i] inc))))
-                     "inc level")
+               ($ (btn-default
+                   (ripple/for-element this)
+                   (sc/on :click #(swap! data dissoc :object)))
+                  "remove obj"))
 
-                  ($ (html/button
-                      (sc/on :click #(swap! test-data assoc :object {:id 1
-                                                                     :name "obj1"
-                                                                     :i 0})))
-                     "swap obj 1") 
-                  
-                  
+            (<$ [data :object]
+                {:key :id
+                 :dom (fn [object]
+                        (when object
+                          ($ (object-display {:object (Cursor. data [:object])}
+                                             (fn [el scope]
+                                               (go (<! el)
+                                                   (log "object display died")))
 
-                  ($ (html/button
-                      (sc/on :click #(swap! test-data dissoc :object)))
-                     "remove obj") 
+                                             (fn [el scope]
+                                               (sc/update! this assoc-in [:refs :display] el))))
+                          ))})
 
-                  ($ (html/button
-                      (sc/on :click #(swap! test-data assoc :object {:id 2
-                                                                     :name "obj2"
-                                                                     :i 0})))
-                     "swap obj 2")
+            
+            )))
 
-                  ($ (html/button
-                      (ripple/for-element this)
-                      (sc/on :click (fn [e el]
-                                      (let [ref (get-in this [:refs :display])]
-                                        (when ref
-                                          (swap! test-data update-in [:object :i] inc))))))
-                     "inc i")) 
+(def test-data (atom {:name ""
+                      :clicks 0}))
 
- 
-               ))))
+(def root-c (atom nil))
 
 (defn ^:export start [ref]
   (log "START")
   
-  (let [root (sc/construct yo)]
+  (let [root (sc/construct (test-component {:data test-data}))]
     (reset! root-c root)
     (dom/insert-before ref root)
     

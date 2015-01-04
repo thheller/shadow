@@ -42,6 +42,9 @@
    figure
    footer
    form
+   input
+   textarea
+   option
    h1
    h2
    h3
