@@ -8,7 +8,7 @@
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   
   :profiles {:dev {:source-paths ["dev"]
-                   :dependencies [[org.clojure/clojurescript "0.0-2511"]
+                   :dependencies [[org.clojure/clojurescript "0.0-2657"]
                                   [thheller/shadow-build "1.0.0-alpha3"]]}}
 
   :source-paths ["src/clj"]

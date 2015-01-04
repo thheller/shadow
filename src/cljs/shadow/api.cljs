@@ -1,5 +1,5 @@
 (ns shadow.api
-  {:load-macros true}
+  (:require-macros [shadow.api :as m])
   (:require [cljs.reader :as reader]
             [shadow.dom :as dom]
             [clojure.string :as str]

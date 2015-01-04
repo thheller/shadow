@@ -1,7 +1,5 @@
 (ns shadow.util
-  {:load-macros true}
-  (:require-macros [shadow.util :as macros])
-  (:require [shadow.api :as api]))
+  (:require-macros [shadow.util :as m]))
 
 (defn console-friendly [a]
   (cond
@@ -74,10 +72,10 @@
 (set! (.. js/cljs -core -ex-info)
       (fn shadow-ex-info
         ([msg map]
-           (macros/log "EX-INFO:" msg map)
+           (m/log "EX-INFO:" msg map)
            (default-ex-info msg map))
         ([msg map cause]
-           (macros/log "EX-INFO:" msg map cause)
+           (m/log "EX-INFO:" msg map cause)
            (default-ex-info msg map cause))
         ))
 

@@ -2,9 +2,31 @@
 <html>
   <head>
     <title>Shadow TEST APP</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap-theme.min.css">
+    <style>
+     .my-toast {
+       display: inline-block;
+       background: #323232;
+       color: #f1f1f1;
+       padding: 20px;
+       box-sizing: border-box;
+       -moz-box-sizing: border-box;
+       box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.26);
+       border-radius: 2px;
+       
+       position: fixed;
+       bottom: 12px;
+       left: 12px;
+       font-size: 14px;
+       cursor: default;
+     }
+    </style>
   </head>
   <body>
-    <script type="shadow/run" data-fn="shadow.test_app.start" data-ref="self"></script>
+    <div class="container">
+      <script type="shadow/run" data-fn="shadow.test_app.start" data-ref="self"></script>
+    </div>
     <script src="target/cljs-out/test.js"></script>
   </body>
 </html>

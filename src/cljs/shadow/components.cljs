@@ -1,6 +1,5 @@
 (ns shadow.components
-  {:load-macros true}
-  (:require-macros [shadow.components :as sc])
+  (:require-macros [shadow.components :as m])
   (:require [clojure.string :as str]
             [goog.string :as gstr]
             [cljs.core.async :as async]
@@ -164,34 +163,6 @@
        (remove #(= filter-id (.-id %)))
        (into [])))
 
-;; RENDER
-;; FIXME: processing does not always need to start at root scope
-;; the watch should instead add its scope to the list of scopes needing an update
-;; on render we should then sort those and only render the ones that require an update
-;; sorting parents before children is important
-
-(def render-queued (atom false))
-
-(defn frame-fn []
-  (let [start (.getTime (js/Date.))]
-    (reset! render-queued false)
-    (process-frame! root-scope)
-    (let [frame-time (- (.getTime (js/Date.)) start)]
-      (when (> frame-time 16)
-        (log "LONG FRAME TIME!" frame-time))
-      )))
-
-(defn add-trigger! [scope key root]
-  (add-watch root key (fn [_ _ _ _]
-                        (when-not @render-queued
-                          (reset! render-queued true)
-                          (js/window.requestAnimationFrame frame-fn)))))
-
-(defn remove-trigger! [scope key root]
-  (remove-watch root key))
-
-;; /RENDER
-
 
 ;; naming things is hard, Scope and ScopeAction suck!
 (deftype Scope [id ^:mutable alive? ^:mutable owner actions children]
@@ -301,6 +272,8 @@
           callback (fn [action old-val new-val]
                      (let [old-el @current]
 
+                       ;; FIXME: add special case where (key new-val) returns nil but new-val is not nil
+                       ;; update is not correct since we might not have an element yet
                        (if (and old-el key (= (key old-val) (key new-val)))
                          ;; if the key stays the same don't fully swap the object
                          (update outer-el old-el old-val new-val)
@@ -354,10 +327,46 @@
 
        (DynamicElement. observable opts))))
 
+;; RENDER
+;; FIXME: processing does not always need to start at root scope
+;; the watch should instead add its scope to the list of scopes needing an update
+;; on render we should then sort those and only render the ones that require an update
+;; sorting parents before children is important
 (defonce root-scope (new-scope nil))
+(def render-queued (atom false))
 
-(defn construct [el]
-  (-construct el root-scope))
+(defn frame-fn []
+  (let [start (.getTime (js/Date.))]
+    (reset! render-queued false)
+    (process-frame! root-scope)
+    (let [frame-time (- (.getTime (js/Date.)) start)]
+      (when (> frame-time 16)
+        (log "LONG FRAME TIME!" frame-time))
+      )))
+
+(defn add-trigger! [scope key root]
+  (add-watch root key (fn [_ _ _ _]
+                        (when-not @render-queued
+                          (reset! render-queued true)
+                          (js/window.requestAnimationFrame frame-fn)))))
+
+(defn remove-trigger! [scope key root]
+  (remove-watch root key))
+
+;; /RENDER
+
+(defn construct
+  ([el]
+     (-construct el root-scope))
+  ([scope el]
+     (let [scope (cond
+                  (instance? Scope scope)
+                  scope
+                  (satisfies? IScoped scope)
+                  (-get-scope scope)
+                  :else
+                  (throw (ex-info "invalid scope" {:scope scope :el el})))]
+       (-construct el scope))))
 
 (deftype CaseEl [observable branches]
   IDynamicElement

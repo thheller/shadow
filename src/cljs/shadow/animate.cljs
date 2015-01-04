@@ -6,6 +6,9 @@
             [cljs.core.async :as async]
             [goog.dom.vendor :as vendor]))
 
+;; FIXME: this needs a cleanup, due to introduction of Animator the whole
+;; other stuff seems unnecessary complex and confusing
+
 ;; not actually sure a protocol is any help here, just a map of maps would work too
 ;; started with a different approach, dunno if there are any drawbacks to keeping this
 (defprotocol Animation
@@ -30,34 +33,54 @@
                          (str " " delay "ms"))))))
          (str/join ", "))))
 
-(defn start [duration elements]
-  (let [items (for [[el adef] elements]
-                (do (when-not (satisfies? Animation adef)
-                      (throw (ex-info "invalid animation" {:el el :animation adef})))
-                    (let [from (-animate-from adef)
-                          to (-animate-to adef)
-                          toggles (-animate-toggles adef)]
-                      {:el el
-                       :from from 
-                       :to to
-                       :toggles toggles
-                       :transition (transition-string duration adef)})))
+(defprotocol Animator
+  (get-duration [animator])
+  (init! [animator] "apply the initial values")
+  (start! [animator] "start the animation, must return a channel that closes once the animation is done")
+  (finish! [animator] "cleanup"))
 
-        ;; steps
-        set-animate-from #(doseq [{:keys [el from]} items]
-                            (dom/set-style el from))
-        set-animate-to #(doseq [{:keys [el to transition]} items]
-                          (let [to (assoc to :transition transition)]
-                            (dom/set-style el to)))
-        set-animate-toggle #(doseq [{:keys [el toggles]} items]
-                              (dom/set-style el (assoc toggles :transition nil)))]
-    (go (set-animate-from) 
-        (<! (async/timeout 0)) ;; give dom a chance to apply styles
-        (set-animate-to)
-        (<! (async/timeout duration))
-        (set-animate-toggle)
-        :done
-        )))
+(defn setup [duration elements]
+  (let [items (into [] (for [[el adef] elements]
+                         (do (when-not (satisfies? Animation adef)
+                               (throw (ex-info "invalid animation" {:el el :animation adef})))
+                             (let [from (-animate-from adef)
+                                   to (-animate-to adef)
+                                   toggles (-animate-toggles adef)]
+                               {:el el
+                                :from from 
+                                :to to
+                                :toggles toggles
+                                :transition (transition-string duration adef)}))))]
+    (reify
+      Animator
+      (get-duration [_] duration)
+      (init! [_]
+        ;; set from values on all nodes
+        (doseq [{:keys [el from]} items]
+          (dom/set-style el from)))
+      (start! [_]
+        ;; set to values
+        (doseq [{:keys [el to transition]} items]
+          (let [to (assoc to :transition transition)]
+            (dom/set-style el to))))
+      (finish! [_]
+        ;; cleanup
+        (doseq [{:keys [el toggles]} items]
+          (dom/set-style el (assoc toggles :transition nil))))
+      )))
+
+(defn continue! [animator]
+  (go (start! animator)
+      (<! (async/timeout (get-duration animator)))
+      (finish! animator)
+      :done
+      ))
+
+(defn start [duration elements]
+  (let [animator (setup duration elements)]
+    (init! animator) 
+    (continue! animator)
+    ))
 
 ;; transitions
 
