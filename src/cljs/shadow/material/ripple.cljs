@@ -27,7 +27,7 @@
   (let [{:keys [w h]} (dom/get-size el)
         {:keys [x y]} (dom/get-position el)
         container (sc/construct parent sm-ripple)
-        wave (sc/construct parent sm-wave)
+        wave (sc/construct container sm-wave)
         ex (.-pageX e)
         ey (.-pageY e)
         grow (anim/setup 500 {wave (anim/combine

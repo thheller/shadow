@@ -169,7 +169,8 @@
     (reset! root-c root)
     (dom/insert-before ref root)
     
-    (toast/display root {} ($ html/h2 "Welcome!"))))
+    ;; (toast/display root {} ($ html/h2 "Welcome!"))
+    ))
 
 (defn ^:export stop []
   (log "STOP")

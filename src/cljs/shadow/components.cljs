@@ -165,7 +165,7 @@
 
 
 ;; naming things is hard, Scope and ScopeAction suck!
-(deftype Scope [id ^:mutable alive? ^:mutable owner actions children]
+(deftype Scope [id parent ^:mutable alive? ^:mutable owner actions children]
 
   IDestruct
   (destroy! [this]
@@ -174,8 +174,10 @@
       (when owner
         (destroy! owner))
       (doseq [child @children]
-        (destroy! child)
-        )))
+        (destroy! child))
+      (when parent
+        (.removeChild parent this))
+      ))
 
   IFramed
   (process-frame! [this]
@@ -184,13 +186,19 @@
   
   Object
   (addAction [this action]
+    (when-not alive?
+      (throw (ex-info "can't add action to dead scope" {:scope this :action action})))
     (swap! actions conj action))
   (removeAction [this action]
-    (swap! actions filter-by-id (.-id action)))
+    (when alive?
+      (swap! actions filter-by-id (.-id action))))
   (addChild [this child]
+    (when-not alive?
+      (throw (ex-info "can't add children to dead scope" {:scope this :child child}))) 
     (swap! children conj child))
   (removeChild [this child]
-    (swap! children filter-by-id (.-id child))))
+    (when alive?
+      (swap! children filter-by-id (.-id child)))))
 
 (deftype ScopeAction [id ^:mutable alive? scope val observable callback]
   IFramed
@@ -234,11 +242,8 @@
 
 (defn new-scope
   [parent]
-  (let [scope (Scope. (next-scope-id)
-                      true
-                      nil
-                      (atom [])
-                      (atom []))]
+  (let [id (next-scope-id)
+        scope (Scope. id parent true nil (atom []) (atom []))]
     (when parent
       (.addChild parent scope))
     scope
