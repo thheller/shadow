@@ -1,10 +1,12 @@
 (ns shadow.components
-  (:require-macros [shadow.components :as m])
-  (:require [clojure.string :as str]
-            [goog.string :as gstr]
-            [cljs.core.async :as async]
+  (:require-macros [shadow.components :as m]
+                   [cljs.core.async.macros :refer (go alt!)])
+  (:require [cljs.core.async :as async]
             [cljs.core.async.impl.protocols :as async-protocols]
-            [shadow.object :as so]
+
+            [clojure.string :as str]
+            [goog.string :as gstr]
+            
             [shadow.util :as util :refer (log)]
             [shadow.dom :as dom]))
 
@@ -63,6 +65,8 @@
     (when (seq x)
       (let [[it & more] x]
         (cond
+         (nil? it)
+         (recur more)
          ;; didn't want recursive cause we might nest deeply
          ;; which would make the stack bigger than required
          (satisfies? IElementList it)
@@ -226,6 +230,8 @@
     (callback this old-val new-val)))
 
 (defn scope-action [scope observable callback]
+  (when (nil? observable)
+    (throw (ex-info "cannot construct action without observable" {})))
   (let [action (ScopeAction. (next-id) true scope (atom nil) observable callback)]
     (.addAction scope action)
     action))
@@ -321,8 +327,15 @@
 (defn <$
   "<$ read as \"at this position in the tree\""
   ([observable]
+     (when (or (nil? observable)
+               (not (satisfies? IPull observable)))
+       (throw (ex-info "cannot construct <$ without observable" {:observable observable})))
      (DynamicElement. observable <$-default-opts))
+
   ([observable opts]
+     (when (or (nil? observable)
+               (not (satisfies? IPull observable)))
+       (throw (ex-info "cannot construct <$ without observable" {:observable observable})))
      (let [opts (cond
                  (map? opts)
                  (merge <$-default-opts opts)
@@ -339,6 +352,7 @@
 ;; on render we should then sort those and only render the ones that require an update
 ;; sorting parents before children is important
 (defonce root-scope (new-scope nil))
+
 (def render-queued (atom false))
 
 (defn frame-fn []
@@ -409,11 +423,14 @@
   (-get-elements [this] this))
 
 (extend-protocol IPull
+  cljs.core/Atom
+  (-pull! [this] @this)
+
   cljs.core/PersistentVector
-  (-pull! [[source key]]
+  (-pull! [[source key :as v]]
     (if (sequential? key)
-      (get-in @source key)
-      (get @source key))))
+      (get-in (-pull! source) key)
+      (get (-pull! source) key))))
 
 (extend-protocol IConstruct
   cljs.core/PersistentVector
@@ -516,6 +533,38 @@
   (take! [_ fn1-handler]
     (async-protocols/take! chan fn1-handler)))
 
+(defn call [instance handle & args]
+  (let [spec (.-spec instance)
+        handle-fn (get spec handle)]
+    (when handle-fn
+      (apply handle-fn instance args))))
+
+(defn call! [instance handle & args]
+  (let [spec (.-spec instance)
+        handle-fn (get spec handle)]
+    (when-not handle-fn
+      (throw (ex-info "component does not provide call handle" {:handle handle
+                                                                :instance instance
+                                                                :args args})))
+    (apply handle-fn instance args)))
+
+(defn set-ref [target path]
+  (fn [el scope]
+    (let [current (get-in @target path)]
+      (update! target assoc-in path el)
+      (call target :ref-changed path current el)
+      
+      ;; FIXME: if el is destroyed, ref should be removed, otherwise we leak
+      (when (satisfies? async-protocols/ReadPort el)
+        (go (alt!
+              target
+              ([_] :target-death-before-ref?)
+              el
+              ([_]
+                 (update! target assoc-in path nil)
+                 (call target :ref-changed path el nil))
+              )))
+      )))
 
 (defn create-instance
   [spec parent-scope attr init-fns children]
@@ -528,37 +577,68 @@
         ;; all should get the return val, not just one lucky one
         chan (async/chan 1)
         
-        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) triggers nil true)
-        
-        ;; FIXME: maybe combine Scope+Instance?
-        _ (do (set! (.-owner scope) cmp)
-              (when-let [init-fn (:init spec)]
-                (init-fn cmp)))
-
-        dom-fn (:dom spec)
-        tree (dom-fn cmp children)
-        ;; _ (log (:name spec) tree)
-        dom (-construct tree scope)]
-
-    (dom/set-data dom :cid id)
-    (set! (.-dom cmp) dom)
-    (aset dom "$$owner" cmp)
-
-    (doseq [init-fn init-fns]
-      (init-fn cmp scope))
+        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) triggers nil true)]
     
-    (when-let [init-fn (:dom/init spec)]
-      (init-fn cmp (dom/dom-node dom)))
+    ;; FIXME: if any of this fails we leak an Instance
+    ;;        which is semi constructed but may already have watches & stuff
+    ;;        wrapping in try/catch prevents JIT from optimizing?
+
+    (set! (.-owner scope) cmp)
+    (call cmp :init)
 
     (add-trigger! scope id cmp)
-    (doseq [trigger (:triggers spec [])
-            :let [trigger (if (satisfies? IWatchable trigger)
-                            trigger
-                            (trigger cmp))]]
-      (swap! triggers conj trigger)
-      (add-trigger! scope id trigger))
-    
-    cmp))
+    (let [trigger-fns (:triggers spec [])]
+      (doseq [[idx trigger] (map-indexed vector trigger-fns)
+              :let [watchable (cond
+                               (nil? trigger)
+                               (throw (ex-info (str (:name spec) " has nil in :triggers?")
+                                               {:idx idx
+                                                :triggers triggers}))
+
+                               (satisfies? IWatchable trigger)
+                               trigger
+
+                               (or (ifn? trigger) (fn? trigger))
+                               (trigger cmp))]]
+
+        (when (nil? watchable)
+          (throw (ex-info (str (:name spec) " with nil watchable")
+                          {:idx idx
+                           :trigger trigger})))
+        (swap! triggers conj watchable)
+        (add-trigger! scope id watchable)))
+
+    (let [dom (or (let [dom-fn (:dom spec)]
+                    (when dom-fn
+                      (-construct (dom-fn cmp children) scope)))
+                  (let [dom-fn (:dom attr)]
+                    (when (and dom-fn (fn? dom-fn))
+                      (-construct (dom-fn cmp children) scope)))
+                  (let [dom (:dom attr)]
+                    (cond
+                     (and dom (satisfies? dom/IElement dom))
+                     dom
+
+                     (and dom (satisfies? IConstruct dom))
+                     (do (when (seq children)
+                           (throw (ex-info "given :dom arg ignores children" {:dom dom :children children})))
+                         (-construct dom scope))
+                     :else
+                     nil)))]
+      
+      (when-not dom
+        (throw (ex-info "component did not construct a dom node" {:spec spec :attr attr})))
+
+      (dom/set-data dom :cid id)
+      (set! (.-dom cmp) dom)
+      (aset dom "$$owner" cmp)
+
+      (doseq [init-fn init-fns]
+        (init-fn cmp scope))
+      
+      (call cmp :dom/init (dom/dom-node dom))
+
+      cmp)))
 
 (defn return-and-destroy! [cmp ret-val]
   (when-not (instance? Instance cmp)

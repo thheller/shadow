@@ -13,6 +13,8 @@
 ;; FIXME: paper does 2 waves
 ;; FIXME: paper optionally moves wave1 to center of element
 ;; FIXME: paper does custom animation through rAF
+;; FIXME: this is really bad performance wise, creating/destroying objects all the time
+;; FIXME: although that doesn't matter cause you have to click really fast to notice
 
 (defc sm-ripple
   :dom (fn [this _]
@@ -31,8 +33,8 @@
         ex (.-pageX e)
         ey (.-pageY e)
         grow (anim/setup 500 {wave (anim/combine
-                                    (anim/transition :opacity "1" "0.1" "ease-out")
-                                    (anim/transition :transform "scale(1)" "scale(10)" "ease-out"))})]
+                                    (anim/transition :opacity "0.8" "0.1" "ease-out")
+                                    (anim/transition :transform "scale(1)" "scale(25)" "ease-out"))})]
 
     (dom/set-style container {:width (dom/px w)
                               :height (dom/px h)

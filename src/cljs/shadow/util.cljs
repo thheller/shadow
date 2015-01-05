@@ -66,7 +66,6 @@
              (pr-str more)))))
 
 ;; HAX
-
 (def default-ex-info js/cljs.core.ex-info)
 
 (set! (.. js/cljs -core -ex-info)
@@ -78,9 +77,5 @@
            (m/log "EX-INFO:" msg map cause)
            (default-ex-info msg map cause))
         ))
-
-(set! (.. js/goog -asserts -doAssertFailure_)
-      (fn [default-message default-args given-message given-args]
-        (throw (ex-info "ASSERT FAILED" {:dm default-message :da default-args :gm given-message :ga given-args}))))
 
 
