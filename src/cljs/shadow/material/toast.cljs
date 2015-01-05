@@ -29,9 +29,9 @@
     :as attr}
    & body]
   (let [toast (sc/construct parent ($ (component attr) body))
-        slide-in (anim/setup 120 {toast (anim/combine
-                                         (anim/translate-y "100%" "0" "ease-in-out")
-                                         (anim/fade-in "ease-in-out"))})]
+        slide-in (anim/setup 80 {toast (anim/combine
+                                        (anim/translate-y "100%" "0" "ease-in-out")
+                                        (anim/fade-in "ease-in-out"))})]
 
     (anim/init! slide-in)
     (dom/append toast) 
