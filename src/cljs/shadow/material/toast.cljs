@@ -6,7 +6,8 @@
             [shadow.components :as sc :refer (defc $)]
             [shadow.animate :as anim]
             [shadow.html :as html]
-            [shadow.dom :as dom]))
+            [shadow.dom :as dom]
+            [shadow.util :as util :refer (log)]))
 
 (def default-attrs {:class "sm-toast"})
 
@@ -27,9 +28,9 @@
     :as attr}
    & body]
   (let [toast (sc/construct parent ($ (component attr) body))
-        slide-in (anim/setup 80 {toast (anim/combine
-                                        (anim/transition :transform "translateY(100%)" "translateY(0)" "ease-in-out")
-                                        (anim/fade-in "ease-in-out"))})]
+        slide-in (anim/setup 120 {toast (anim/combine
+                                         (anim/translate-y "100%" "0" "ease-in-out")
+                                         (anim/fade-in "ease-in-out"))})]
 
     (anim/init! slide-in)
     (dom/append toast) 

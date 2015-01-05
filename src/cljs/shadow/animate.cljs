@@ -4,7 +4,9 @@
             [shadow.object :as so]
             [clojure.string :as str]
             [cljs.core.async :as async]
-            [goog.dom.vendor :as vendor]))
+            [goog.dom.vendor :as vendor]
+            [goog.style :as gs]
+            [shadow.util :as util :refer (log)]))
 
 ;; FIXME: this needs a cleanup, due to introduction of Animator the whole
 ;; other stuff seems unnecessary complex and confusing
@@ -46,10 +48,10 @@
                              (let [from (-animate-from adef)
                                    to (-animate-to adef)
                                    toggles (-animate-toggles adef)]
-                               {:el el
-                                :from from 
-                                :to to
-                                :toggles toggles
+                               {:el (dom/dom-node el)
+                                :from (clj->js from) 
+                                :to (clj->js to)
+                                :toggles (clj->js toggles)
                                 :transition (transition-string duration adef)}))))]
     (reify
       Animator
@@ -57,24 +59,24 @@
       (init! [_]
         ;; set from values on all nodes
         (doseq [{:keys [el from]} items]
-          (dom/set-style el from)))
+          (gs/setStyle el from)))
       (start! [_]
         ;; set to values
         (doseq [{:keys [el to transition]} items]
-          (let [to (assoc to :transition transition)]
-            (dom/set-style el to))))
+          (aset to "transition" transition)
+          (gs/setStyle el to)))
       (finish! [_]
         ;; cleanup
         (doseq [{:keys [el toggles]} items]
-          (dom/set-style el (assoc toggles :transition nil))))
+          (aset toggles "transition" nil)
+          (gs/setStyle el toggles)))
       )))
 
 (defn continue! [animator]
   (go (start! animator)
       (<! (async/timeout (get-duration animator)))
       (finish! animator)
-      :done
-      ))
+      :done))
 
 (defn start [duration elements]
   (let [animator (setup duration elements)]

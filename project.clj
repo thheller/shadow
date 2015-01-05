@@ -22,7 +22,8 @@
          
          :live-reload {:before-load 'shadow.test-app/stop}
 
-         :source-paths ["src/cljs"
+         :source-paths ["src/js"
+                        "src/cljs"
                         "src/test-app"]
          :public-dir "target/cljs-out"
          :public-path "target/cljs-out"}
