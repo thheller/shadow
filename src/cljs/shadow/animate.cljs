@@ -6,7 +6,7 @@
             [cljs.core.async :as async]
             [goog.dom.vendor :as vendor]
             [goog.style :as gs]
-            [shadow.util :as util :refer (log)]))
+            [shadow.util :as util :refer (doarray log)]))
 
 ;; FIXME: this needs a cleanup, due to introduction of Animator the whole
 ;; other stuff seems unnecessary complex and confusing
@@ -35,42 +35,46 @@
                          (str " " delay "ms"))))))
          (str/join ", "))))
 
-(defprotocol Animator
+(defprotocol IAnimator
   (get-duration [animator])
   (init! [animator] "apply the initial values")
   (start! [animator] "start the animation, must return a channel that closes once the animation is done")
   (finish! [animator] "cleanup"))
 
+(deftype Animator [duration items]
+  IAnimator
+  (get-duration [_] duration)
+  (init! [_]
+    ;; set from values on all nodes
+    (doarray [{:keys [el from]} items]
+      (gs/setStyle el from)))
+  (start! [_]
+    ;; set to values
+    (doarray [{:keys [el to transition]} items]
+      (aset to "transition" transition)
+      (gs/setStyle el to)))
+  (finish! [_]
+    ;; cleanup
+    (doarray [{:keys [el toggles]} items]
+      (aset toggles "transition" nil)
+      (gs/setStyle el toggles))))
+
+(defrecord AnimationStep [el from to toggles transition])
+
 (defn setup [duration elements]
-  (let [items (into [] (for [[el adef] elements]
-                         (do (when-not (satisfies? Animation adef)
-                               (throw (ex-info "invalid animation" {:el el :animation adef})))
-                             (let [from (-animate-from adef)
-                                   to (-animate-to adef)
-                                   toggles (-animate-toggles adef)]
-                               {:el (dom/dom-node el)
-                                :from (clj->js from) 
-                                :to (clj->js to)
-                                :toggles (clj->js toggles)
-                                :transition (transition-string duration adef)}))))]
-    (reify
-      Animator
-      (get-duration [_] duration)
-      (init! [_]
-        ;; set from values on all nodes
-        (doseq [{:keys [el from]} items]
-          (gs/setStyle el from)))
-      (start! [_]
-        ;; set to values
-        (doseq [{:keys [el to transition]} items]
-          (aset to "transition" transition)
-          (gs/setStyle el to)))
-      (finish! [_]
-        ;; cleanup
-        (doseq [{:keys [el toggles]} items]
-          (aset toggles "transition" nil)
-          (gs/setStyle el toggles)))
-      )))
+  (let [items (into-array (for [[el adef] elements]
+                            (do (when-not (satisfies? Animation adef)
+                                  (throw (ex-info "invalid animation" {:el el :animation adef})))
+                                (let [from (-animate-from adef)
+                                      to (-animate-to adef)
+                                      toggles (-animate-toggles adef)]
+                                  (AnimationStep.
+                                   (dom/dom-node el)
+                                   (clj->js from) 
+                                   (clj->js to)
+                                   (clj->js toggles)
+                                   (transition-string duration adef))))))]
+    (Animator. duration items)))
 
 (defn continue! [animator]
   (go (start! animator)

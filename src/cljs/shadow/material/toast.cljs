@@ -12,11 +12,12 @@
 (def default-attrs {:class "sm-toast"})
 
 (defc component
-  :dom/init (fn [this dom]
-              (dom/on dom :click #(sc/destroy! this)))
-
   :dom (fn [{:keys [attrs] :as this} children]
-         ($ (html/div (merge default-attrs attrs)) children)))
+         ($ (html/div
+             (merge default-attrs attrs)
+             (sc/on :click (fn [_ _]
+                             (sc/destroy! this))))
+            children)))
 
 ;; FIXME: currently toasts can overlap each other, should instead queue after each other
 ;; FIXME: should probably also animate out
