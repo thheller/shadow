@@ -93,13 +93,11 @@
               ($ html/div
 
                  ($ (btn-default
-                     (ripple/for-element this)
                      (sc/on :click (fn [e el]
                                      (toast/display this {} "Hello World!"))))
                     "toast") 
 
                  ($ (btn-default
-                     (ripple/for-element this)
                      (sc/on :click #(swap! data assoc :object {:id 1
                                                                :name "obj1"
                                                                :i 0})))
@@ -107,14 +105,12 @@
                  
                  
                  ($ (btn-default
-                     (ripple/for-element this)
                      (sc/on :click #(swap! data assoc :object {:id 2
                                                                :name "obj2"
                                                                :i 0})))
                     "swap obj 2")
 
                  ($ (btn-default
-                     (ripple/for-element this)
                      (sc/on :click (fn [e el]
                                      (let [ref (get-in this [:refs :display])]
                                        (when ref
@@ -122,12 +118,10 @@
                     "inc i")
 
                  ($ (btn-default
-                     (ripple/for-element this)
                      (sc/on :click #(swap! data dissoc :object)))
                     "remove obj")
 
                  ($ (btn-default
-                     (ripple/for-element this)
                      (sc/on :click dt/scope-snapshot))
                     "scope snapshot"))
               

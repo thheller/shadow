@@ -11,9 +11,10 @@
             [shadow.dom :as dom]))
 
 (def next-id
-  (let [id-seq (atom 0)]
+  (let [id-obj #js {:id 0}]
     (fn []
-      (swap! id-seq inc))))
+      (set! (.-id id-obj) (inc (.-id id-obj)))
+      )))
 
 (defprotocol IElementFactory
   (-create-element [this scope children]))
@@ -42,26 +43,41 @@
 (defprotocol ISlice
   (-slice [this path]))
 
-(deftype Cursor [root path]
+(defprotocol IRefCounted
+  (-ref-inc! [this])
+  (-ref-dec! [this]))
+
+(declare queue-frame!)
+
+(deftype Cursor [id root path ^:mutable ref-count]
   IDeref
   (-deref [_]
     (get-in @root path))
+  
+  IRefCounted
+  (-ref-inc! [this]
+    (when (zero? ref-count)
+      ;; if something references us and our value changes we need to queue a frame
+      (add-watch root id (fn [_ _ ov nv]
+                           (when (not= (get-in ov path)
+                                       (get-in nv path))
+                             (queue-frame!)))))
+    (set! ref-count (inc ref-count)))
 
-  IWatchable
-  (-add-watch [this key callback]
-    (-add-watch root key callback))
-  (-remove-watch [this key]
-    (-remove-watch root key))
+  (-ref-dec! [this]
+    (set! ref-count (dec ref-count))
+    (when (zero? ref-count)
+      (remove-watch root id)))
 
   IEquiv
   (-equiv [this other]
     (and (instance? Cursor other)
-         (-equiv root (.-root other))
-         (-equiv path (.-path other))))
+         (= id (.-id other))))
 
   ISlice
   (-slice [this new-path]
-    (Cursor. root (into path new-path)))
+    (let [id (next-id)]
+      (Cursor. id root (into path new-path) 0)))
 
   IHash
   (-hash [this]
@@ -82,7 +98,8 @@
 (extend-protocol ISlice
   Atom
   (-slice [this path]
-    (Cursor. this path)))
+    (let [id (next-id)]
+      (Cursor. id this path 0))))
 
 (defn cursor [src path]
   (if (sequential? path)
@@ -218,7 +235,6 @@
 
 ;; naming things is hard, Scope and ScopeAction suck!
 (deftype Scope [id name parent ^:mutable alive? ^:mutable owner actions children]
-
   IDestruct
   (destroy! [this]
     (when alive?
@@ -245,7 +261,6 @@
     (swap! actions conj action))
   (removeAction [this action]
     (when alive?
-      ;; FIXME: must remove watch!
       (swap! actions filter-by-id (.-id action))))
   (addChild [this child]
     (when-not alive?
@@ -255,21 +270,21 @@
     (when alive?
       (swap! children filter-by-id (.-id child)))))
 
-(deftype ScopeAction [id ^:mutable dirty? ^:mutable alive? scope val cursor callback]
+(deftype ScopeAction [id ^:mutable alive? scope val cursor callback]
   IFramed
   (process-frame! [this]
     ;; an action or scope might be destroyed mid-frame, we don't need to render it then
-    (when (and (.-alive? scope) alive? dirty?)
+    (when (and alive? (.-alive? scope))
       (let [old-val @val
-            new-val (-deref cursor)]
-        ;; no need to compare, we know we are dirty
-        (set! dirty? false)
-        (.do! this old-val new-val))))
+            new-val @cursor]
+        (when (not= old-val new-val)
+          (.do! this old-val new-val)))))
   
   IDestruct
   (destroy! [this]
     (when alive?
       (set! alive? false)
+      (-ref-dec! cursor)
       (.removeAction scope this)))
   
   Object
@@ -280,27 +295,10 @@
     (reset! val new-val)
     (callback this old-val new-val)))
 
-(defn scope-action [scope cursor callback]
-  (when (nil? cursor)
-    (throw (ex-info "cannot construct action without cursor" {})))
-  (let [id (next-id)
-        action (ScopeAction. id false true scope (atom nil) cursor callback)]
-    (.addAction scope action)
-    (add-watch cursor id (fn [_ _ _ _]
-                           (want-frame!)
-                           (set! (.-dirty? action) true)
-                           ))
-    action))
-
 (def next-scope-id
   (let [id (atom 0)]
     (fn []
       (str "$$scope" (swap! id inc)))))
-
-(def next-component-id
-  (let [id (atom 0)]
-    (fn [prefix]
-      (str "$$" prefix "$" (swap! id inc)))))
 
 (defn new-scope
   [name parent]
@@ -310,6 +308,41 @@
       (.addChild parent scope))
     scope
     ))
+
+;; RENDER
+;; FIXME: processing does not always need to start at root scope
+;; the watch should instead add its scope to the list of scopes needing an update
+;; on render we should then sort those and only render the ones that require an update
+;; sorting parents before children is important
+(defonce root-scope (new-scope "ROOT" nil))
+
+(def render-queued (atom false))
+
+(defn frame-fn []
+  (let [start (.getTime (js/Date.))]
+    (reset! render-queued false)
+    (process-frame! root-scope)
+    (let [frame-time (- (.getTime (js/Date.)) start)]
+      (when (> frame-time 16)
+        (log "LONG FRAME TIME!" frame-time))
+      )))
+
+(defn queue-frame! []
+  (when-not @render-queued
+    (reset! render-queued true)
+    (js/window.requestAnimationFrame frame-fn)))
+
+;; /RENDER
+
+(defn scope-action [scope cursor callback]
+  (when (nil? cursor)
+    (throw (ex-info "cannot construct action without cursor" {})))
+  (let [id (next-id)
+        action (ScopeAction. id true scope (atom nil) cursor callback)]
+    (.addAction scope action)
+    (-ref-inc! cursor)
+    action))
+
 
 (defn bind
   "whenever the cursor value changes, do (callback el new-value)
@@ -389,14 +422,14 @@
   ([cursor]
      (when (or (nil? cursor)
                (not (satisfies? IDeref cursor))
-               (not (satisfies? IWatchable cursor)))
+               (not (satisfies? IRefCounted cursor)))
        (throw (ex-info "cannot construct <$ without cursor" {:cursor cursor})))
      (DynamicElement. cursor <$-default-opts))
 
   ([cursor opts]
      (when (or (nil? cursor)
                (not (satisfies? IDeref cursor))
-               (not (satisfies? IWatchable cursor)))
+               (not (satisfies? IRefCounted cursor)))
        (throw (ex-info "cannot construct <$ without cursor" {:cursor cursor})))
      (let [opts (cond
                  (map? opts)
@@ -407,31 +440,6 @@
                  (throw (ex-info "invalid argument to dynamic element" {:opts opts})))]
 
        (DynamicElement. cursor opts))))
-
-;; RENDER
-;; FIXME: processing does not always need to start at root scope
-;; the watch should instead add its scope to the list of scopes needing an update
-;; on render we should then sort those and only render the ones that require an update
-;; sorting parents before children is important
-(defonce root-scope (new-scope "ROOT" nil))
-
-(def render-queued (atom false))
-
-(defn frame-fn []
-  (let [start (.getTime (js/Date.))]
-    (reset! render-queued false)
-    (process-frame! root-scope)
-    (let [frame-time (- (.getTime (js/Date.)) start)]
-      (when (> frame-time 16)
-        (log "LONG FRAME TIME!" frame-time))
-      )))
-
-(defn want-frame! []
-  (when-not @render-queued
-    (reset! render-queued true)
-    (js/window.requestAnimationFrame frame-fn)))
-
-;; /RENDER
 
 (defn construct
   ([el]
@@ -597,6 +605,11 @@
       (update! target assoc-in path el)
       (call target :ref-changed path current el)
       )))
+
+(def next-component-id
+  (let [id (atom 0)]
+    (fn [prefix]
+      (str "$$" prefix "$" (swap! id inc)))))
 
 (defn create-instance
   [spec parent-scope attr init-fns children]
