@@ -9,6 +9,7 @@
             [shadow.animate :as anim]
             [shadow.material.toast :as toast]
             [shadow.material.ripple :as ripple]
+            [shadow.dev-tools :as dt]
             ))
 
 
@@ -185,7 +186,12 @@
                  ($ (btn-default
                      (ripple/for-element this)
                      (sc/on :click #(swap! data dissoc :object)))
-                    "remove obj"))
+                    "remove obj")
+
+                 ($ (btn-default
+                     (ripple/for-element this)
+                     (sc/on :click dt/scope-snapshot))
+                    "scope snapshot"))
 
               (<$ object-c
                   {:key :id

@@ -169,7 +169,7 @@
 
 
 ;; naming things is hard, Scope and ScopeAction suck!
-(deftype Scope [id parent ^:mutable alive? ^:mutable owner actions children]
+(deftype Scope [id name parent ^:mutable alive? ^:mutable owner actions children]
 
   IDestruct
   (destroy! [this]
@@ -247,9 +247,9 @@
       (str "$$" prefix "$" (swap! id inc)))))
 
 (defn new-scope
-  [parent]
+  [name parent]
   (let [id (next-scope-id)
-        scope (Scope. id parent true nil (atom []) (atom []))]
+        scope (Scope. id name parent true nil (atom []) (atom []))]
     (when parent
       (.addChild parent scope))
     scope
@@ -276,9 +276,13 @@
 
 (deftype DynamicElement [observable opts]
   IDynamicElement
-  (-insert-element! [_ scope outer-el]
+  (-insert-element! [_ outer-scope outer-el]
     (let [current (atom nil)
-
+          
+          ;; introduce middlemen scope so we keep our position in the tree
+          ;; otherwise swapping a child takes us from to the end
+          inner-scope (new-scope "<$" outer-scope)
+          
           {:keys [key insert replace update remove dom]} opts
 
           callback (fn [action old-val new-val]
@@ -293,7 +297,7 @@
                          (let [new-def (dom new-val)
                                ;; if no node needs to be constructed at this point
                                ;; just use empty text node as a placeholder
-                               new-el (-construct (if (nil? new-def) "" new-def) scope)]
+                               new-el (-construct (if (nil? new-def) "" new-def) inner-scope)]
 
                            (reset! current new-el)
 
@@ -305,7 +309,7 @@
                             :else
                             (replace outer-el old-el old-val new-el new-val))))))]
       
-      (.execute! (scope-action scope observable callback))
+      (.execute! (scope-action inner-scope observable callback))
       )))
 
 (def <$-default-opts
@@ -351,7 +355,7 @@
 ;; the watch should instead add its scope to the list of scopes needing an update
 ;; on render we should then sort those and only render the ones that require an update
 ;; sorting parents before children is important
-(defonce root-scope (new-scope nil))
+(defonce root-scope (new-scope "ROOT" nil))
 
 (def render-queued (atom false))
 
@@ -553,22 +557,11 @@
     (let [current (get-in @target path)]
       (update! target assoc-in path el)
       (call target :ref-changed path current el)
-      
-      ;; FIXME: if el is destroyed, ref should be removed, otherwise we leak
-      (when (satisfies? async-protocols/ReadPort el)
-        (go (alt!
-              target
-              ([_] :target-death-before-ref?)
-              el
-              ([_]
-                 (update! target assoc-in path nil)
-                 (call target :ref-changed path el nil))
-              )))
       )))
 
 (defn create-instance
   [spec parent-scope attr init-fns children]
-  (let [scope (new-scope parent-scope)
+  (let [scope (new-scope (:name spec) parent-scope)
         id (next-component-id (:name spec))
         triggers (atom [])
         
