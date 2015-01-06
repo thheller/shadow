@@ -39,17 +39,10 @@
 (defprotocol IFramed
   (process-frame! [this]))
 
-(defprotocol IPull
-  (-pull! [this] "basically IDeref"))
-
 (defprotocol ISlice
   (-slice [this path]))
 
 (deftype Cursor [root path]
-  IPull
-  (-pull! [this]
-    (get-in (-pull! root) path))
-
   IDeref
   (-deref [_]
     (get-in @root path))
@@ -234,6 +227,8 @@
         (destroy! owner))
       (doseq [child @children]
         (destroy! child))
+      (doseq [action @actions]
+        (destroy! action))
       (when parent
         (.removeChild parent this))
       ))
@@ -250,6 +245,7 @@
     (swap! actions conj action))
   (removeAction [this action]
     (when alive?
+      ;; FIXME: must remove watch!
       (swap! actions filter-by-id (.-id action))))
   (addChild [this child]
     (when-not alive?
@@ -259,16 +255,16 @@
     (when alive?
       (swap! children filter-by-id (.-id child)))))
 
-(deftype ScopeAction [id ^:mutable alive? scope val observable callback]
+(deftype ScopeAction [id ^:mutable dirty? ^:mutable alive? scope val cursor callback]
   IFramed
   (process-frame! [this]
     ;; an action or scope might be destroyed mid-frame, we don't need to render it then
-    (when (and (.-alive? scope) alive?)
+    (when (and (.-alive? scope) alive? dirty?)
       (let [old-val @val
-            new-val (-pull! observable)]
-        (when (not= old-val new-val)
-          (.do! this old-val new-val)
-          ))))
+            new-val (-deref cursor)]
+        ;; no need to compare, we know we are dirty
+        (set! dirty? false)
+        (.do! this old-val new-val))))
   
   IDestruct
   (destroy! [this]
@@ -278,17 +274,22 @@
   
   Object
   (execute! [this]
-    (.do! this @val (-pull! observable)))
+    (.do! this @val (-deref cursor)))
 
   (do! [this old-val new-val]
     (reset! val new-val)
     (callback this old-val new-val)))
 
-(defn scope-action [scope observable callback]
-  (when (nil? observable)
-    (throw (ex-info "cannot construct action without observable" {})))
-  (let [action (ScopeAction. (next-id) true scope (atom nil) observable callback)]
+(defn scope-action [scope cursor callback]
+  (when (nil? cursor)
+    (throw (ex-info "cannot construct action without cursor" {})))
+  (let [id (next-id)
+        action (ScopeAction. id false true scope (atom nil) cursor callback)]
     (.addAction scope action)
+    (add-watch cursor id (fn [_ _ _ _]
+                           (want-frame!)
+                           (set! (.-dirty? action) true)
+                           ))
     action))
 
 (def next-scope-id
@@ -311,25 +312,25 @@
     ))
 
 (defn bind
-  "whenever the observable value changes, do (callback el new-value)
+  "whenever the cursor value changes, do (callback el new-value)
    where el is the current dom element"
-  [observable outer-callback]
+  [cursor outer-callback]
   (fn [el scope owner]
     (let [callback (fn [action old-val new-val]
                      (outer-callback el new-val))]
 
-      (.execute! (scope-action scope observable callback))
+      (.execute! (scope-action scope cursor callback))
       )))
 
-(defn bind-attr [attr observable callback]
-  (bind observable (fn [el new-value] (dom/set-attr el attr (callback new-value)))))
+(defn bind-attr [attr cursor callback]
+  (bind cursor (fn [el new-value] (dom/set-attr el attr (callback new-value)))))
 
 (defn on [event callback]
   (fn [el scope owner]
     (dom/on el event (fn [e el]
                        (callback e el scope owner)))))
 
-(deftype DynamicElement [observable opts]
+(deftype DynamicElement [cursor opts]
   IDynamicElement
   (-insert-element! [_ outer-scope outer-el]
     (let [current (atom nil)
@@ -364,7 +365,7 @@
                             :else
                             (replace outer-el old-el old-val new-el new-val))))))]
       
-      (.execute! (scope-action inner-scope observable callback))
+      (.execute! (scope-action inner-scope cursor callback))
       )))
 
 (def <$-default-opts
@@ -385,16 +386,18 @@
 
 (defn <$
   "<$ read as \"at this position in the tree\""
-  ([observable]
-     (when (or (nil? observable)
-               (not (satisfies? IPull observable)))
-       (throw (ex-info "cannot construct <$ without observable" {:observable observable})))
-     (DynamicElement. observable <$-default-opts))
+  ([cursor]
+     (when (or (nil? cursor)
+               (not (satisfies? IDeref cursor))
+               (not (satisfies? IWatchable cursor)))
+       (throw (ex-info "cannot construct <$ without cursor" {:cursor cursor})))
+     (DynamicElement. cursor <$-default-opts))
 
-  ([observable opts]
-     (when (or (nil? observable)
-               (not (satisfies? IPull observable)))
-       (throw (ex-info "cannot construct <$ without observable" {:observable observable})))
+  ([cursor opts]
+     (when (or (nil? cursor)
+               (not (satisfies? IDeref cursor))
+               (not (satisfies? IWatchable cursor)))
+       (throw (ex-info "cannot construct <$ without cursor" {:cursor cursor})))
      (let [opts (cond
                  (map? opts)
                  (merge <$-default-opts opts)
@@ -403,7 +406,7 @@
                  :else
                  (throw (ex-info "invalid argument to dynamic element" {:opts opts})))]
 
-       (DynamicElement. observable opts))))
+       (DynamicElement. cursor opts))))
 
 ;; RENDER
 ;; FIXME: processing does not always need to start at root scope
@@ -423,14 +426,10 @@
         (log "LONG FRAME TIME!" frame-time))
       )))
 
-(defn add-trigger! [scope key root]
-  (add-watch root key (fn [_ _ _ _]
-                        (when-not @render-queued
-                          (reset! render-queued true)
-                          (js/window.requestAnimationFrame frame-fn)))))
-
-(defn remove-trigger! [scope key root]
-  (remove-watch root key))
+(defn want-frame! []
+  (when-not @render-queued
+    (reset! render-queued true)
+    (js/window.requestAnimationFrame frame-fn)))
 
 ;; /RENDER
 
@@ -447,7 +446,7 @@
                   (throw (ex-info "invalid scope" {:scope scope :el el})))]
        (-construct el scope))))
 
-(deftype CaseEl [observable branches]
+(deftype CaseEl [cursor branches]
   IDynamicElement
   (-insert-element! [_ scope outer-el]
     (let [current (atom nil)
@@ -469,27 +468,17 @@
                            (dom/append outer-el new-el))
                          )))]
       
-      (.execute! (scope-action scope observable callback))
+      (.execute! (scope-action scope cursor callback))
       )))
 
-(defn case-el* [observable branches]
-  (CaseEl. observable branches))
+(defn case-el* [cursor branches]
+  (CaseEl. cursor branches))
 
 (extend-protocol IElementList
   cljs.core/IndexedSeq
   (-get-elements [this] this)
   cljs.core/LazySeq
   (-get-elements [this] this))
-
-(extend-protocol IPull
-  cljs.core/Atom
-  (-pull! [this] @this)
-
-  cljs.core/PersistentVector
-  (-pull! [[source key :as v]]
-    (if (sequential? key)
-      (get-in (-pull! source) key)
-      (get (-pull! source) key))))
 
 (extend-protocol IConstruct
   cljs.core/PersistentVector
@@ -537,7 +526,6 @@
      chan
      ^:mutable ret-val
      state ;; local state
-     triggers ;; Observables that trigger an update of this instance
      ^:mutable dom
      ^:mutable alive?]
   IScoped
@@ -548,10 +536,6 @@
   (destroy! [this]
     (when alive?
       (set! alive? false)
-
-      (remove-trigger! scope id this)
-      (doseq [trigger @triggers]
-        (remove-trigger! scope id trigger))
 
       (set! (.-owner scope) nil)
       (destroy! scope)
@@ -618,14 +602,13 @@
   [spec parent-scope attr init-fns children]
   (let [scope (new-scope (:name spec) parent-scope)
         id (next-component-id (:name spec))
-        triggers (atom [])
         
         ;; FIXME: change to promise-chan when we get them!
         ;; there may be many other instances waiting for our death
         ;; all should get the return val, not just one lucky one
         chan (async/chan 1)
         
-        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) triggers nil true)]
+        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) nil true)]
     
     ;; FIXME: if any of this fails we leak an Instance
     ;;        which is semi constructed but may already have watches & stuff
@@ -633,28 +616,6 @@
 
     (set! (.-owner scope) cmp)
     (call cmp :init)
-
-    (add-trigger! scope id cmp)
-    (let [trigger-fns (:triggers spec [])]
-      (doseq [[idx trigger] (map-indexed vector trigger-fns)
-              :let [watchable (cond
-                               (nil? trigger)
-                               (throw (ex-info (str (:name spec) " has nil in :triggers?")
-                                               {:idx idx
-                                                :triggers triggers}))
-
-                               (satisfies? IWatchable trigger)
-                               trigger
-
-                               (or (ifn? trigger) (fn? trigger))
-                               (trigger cmp))]]
-
-        (when (nil? watchable)
-          (throw (ex-info (str (:name spec) " with nil watchable")
-                          {:idx idx
-                           :trigger trigger})))
-        (swap! triggers conj watchable)
-        (add-trigger! scope id watchable)))
 
     (let [dom (or (let [dom-fn (:dom spec)]
                     (when dom-fn

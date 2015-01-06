@@ -12,9 +12,6 @@
             [shadow.dev-tools :as dt]
             ))
 
-
-
-
 (defn object-title
   [{:keys [id name] :as object}]
   (str "object #" id " - " name))
@@ -29,15 +26,12 @@
   (html/button
    {:type "button" :class "btn btn-default"}))
 
-
 (defc object-display
-  :triggers [:object-c]
-
   :dom (fn [{:keys [object-c] :as this} _]
          ($ html/div
             ($ html/h2 "OBJECT!")
             ($ div-title (<$ object-c object-title))
-            (<$ [object-c :i] str))))
+            (<$ (sc/cursor object-c [:i]) str))))
 
 (defn inc-clicks [data e el]
   (swap! data update :clicks inc))
@@ -58,8 +52,6 @@
    ))
 
 (defc test-component
-  :triggers [:data]
-  
   :init (fn [this])
 
   :dom/init (fn [this el])
@@ -69,10 +61,11 @@
            ($ html/div
               ($ html/h1
                  "Hello "
-                 (<$ [data :name] (fn [value]
-                                    (if (seq value)
-                                      value
-                                      "Stranger")))
+                 (<$ (sc/cursor data [:name])
+                     (fn [value]
+                       (if (seq value)
+                         value
+                         "Stranger")))
                  "!")
               
               ($ (html/form
@@ -94,10 +87,9 @@
                        "Click me, I do Stuff!"))
 
                  ($ div-form-group
-                    (<$ [data :clicks] clicks-text)))
+                    (<$ (sc/cursor data [:clicks]) clicks-text)))
+              
 
-              
-              
               ($ html/div
 
                  ($ (btn-default
@@ -138,6 +130,11 @@
                      (ripple/for-element this)
                      (sc/on :click dt/scope-snapshot))
                     "scope snapshot"))
+              
+              (comment
+                (<$* coll-c
+                     {:key :id
+                      :dom (fn [data ])}))
 
               (<$ object-c
                   {:key :id

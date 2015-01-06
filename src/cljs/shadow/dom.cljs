@@ -145,6 +145,16 @@
     (dom/createDom tag-name props)
     ))
 
+(defn append
+  ([node]
+     (let [n (dom-node node)]
+       (.appendChild (.-body js/document) n)
+       n))
+  ([el node]
+     (let [n (dom-node node)]
+       (.appendChild (dom-node el) n)
+       n)))
+
 (defn destructure-node
   [create-fn [nn np & nc :as node]]
   (when-not (keyword? nn)
@@ -160,28 +170,6 @@
 
 ;; restore sanity!
 
-(defn macro-node [tag-name tag-id tag-classes attrs & body]
-  (let [[attrs body] (if (map? attrs)
-                       [attrs body]
-                       [{} (cons attrs body)])
-        props (clj->js attrs)]
-
-    (when tag-id
-      (aset props "id" tag-id))
-
-    (when tag-classes
-      (aset props "class" (merge-class-string (aget props "class") tag-classes)))
-
-    (let [node (dom/createDom tag-name props)]
-      (doseq [child-struct body]
-        (if (seq? child-struct)
-          (doseq [child child-struct]
-            (dom/append node (dom-node child)))
-          (dom/append node (dom-node child-struct))
-          ))
-      node
-      )))
-
 (defn make-dom-node [structure]
   (let [[node node-children] (destructure-node create-dom-node structure)]
 
@@ -190,9 +178,9 @@
         (if (seq? children)
           (doseq [child (map dom-node children)
                   :when child]
-            (dom/append node child))
+            (append node child))
           (do
-            (dom/append node children)))))
+            (append node children)))))
     node))
 
 (extend-protocol IElement
@@ -218,16 +206,6 @@
     js/DocumentFragment
     (-to-dom [this] this)
     ))
-
-(defn append
-  ([node]
-     (let [n (dom-node node)]
-       (dom/append (.-body js/document) n)
-       n))
-  ([el node]
-     (let [n (dom-node node)]
-       (dom/append (dom-node el) n)
-       n)))
 
 (defn query-one
   ([sel] (.querySelector js/document sel))
@@ -360,33 +338,11 @@
 (defn del-attr [el key]
   (.removeAttribute (dom-node el) (name key)))
 
-;; dont ever include a script including this in <head>!
-;; FIXME: is it worth using dataset over get/setAttribute?
-(def data
-  (if (.. js/document -body -dataset)
-    (fn data-dataset [el key]
-      (try
-        (aget (-> el dom-node .-dataset) (gstr/toCamelCase (name key)))
-        (catch :default e
-          ;; firefox doesn't have el.dataset on svg nodes!
-          (.getAttribute (dom-node el) (str "data-" (name key))))
-        ))
-    (fn data-get-attribute [el key]
-      (.getAttribute (dom-node el) (str "data-" (name key)))) ;; fallback
-    ))
+(defn data [el key]
+  (.getAttribute (dom-node el) (str "data-" (name key))))
 
-(def set-data 
-  (if (.. js/document -body -dataset)
-    (fn set-data-dataset [el key value]
-      (try
-        (aset (-> el dom-node .-dataset) (gstr/toCamelCase (name key)) (str value))
-        (catch :default e
-          ;; firefox doesn't have el.dataset on svg nodes!
-          (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
-        ))
-    (fn set-data-set-attribute [el key value]
-      (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
-    ))
+(defn set-data [el key value]
+  (.setAttribute (dom-node el) (str "data-" (name key)) (str value)))
 
 (defn set-html [node text]
   (set! (.-innerHTML (dom-node node)) text))
