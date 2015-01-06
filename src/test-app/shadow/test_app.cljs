@@ -19,60 +19,6 @@
   [{:keys [id name] :as object}]
   (str "object #" id " - " name))
 
-(defprotocol ISlice
-  (-slice [this path]))
-
-(deftype Cursor [root path]
-  sc/IPull
-  (-pull! [this]
-    (get-in (sc/-pull! root) path))
-
-  IDeref
-  (-deref [_]
-    (get-in @root path))
-
-  IWatchable
-  (-add-watch [this key callback]
-    (-add-watch root key callback))
-  (-remove-watch [this key]
-    (-remove-watch root key))
-
-  IEquiv
-  (-equiv [this other]
-    (and (instance? Cursor other)
-         (-equiv root (.-root other))
-         (-equiv path (.-path other))))
-
-  ISlice
-  (-slice [this new-path]
-    (Cursor. root (into path new-path)))
-
-  IHash
-  (-hash [this]
-    (js/goog.getUid this))
-  
-  IPrintWithWriter
-  (-pr-writer [_ w opts]
-    (-write w "#<Cursor ")
-    (-pr-writer path w opts)
-    (-write w " ")
-    (-pr-writer root w opts)
-    (-write w ">"))
-  
-  Object
-  (toString [this]
-    (str "#<Cursor " path " " root ">")))
-
-(extend-protocol ISlice
-  Atom
-  (-slice [this path]
-    (Cursor. this path)))
-
-(defn cursor [src path]
-  (if (sequential? path)
-    (-slice src path)
-    (-slice src [path])))
-
 (def div-title
   (html/div {:class "title"}))
 
@@ -119,7 +65,7 @@
   :dom/init (fn [this el])
   
   :dom (fn [{:keys [data] :as this} _]
-         (let [object-c (cursor data :object)]
+         (let [object-c (sc/cursor data :object)]
            ($ html/div
               ($ html/h1
                  "Hello "
@@ -215,7 +161,7 @@
 
 (defn ^:export start [ref]
   (log "START")
-  
+
   (let [root (sc/construct (test-component {:data test-data}))]
     (reset! root-c root)
     (dom/insert-before ref root)

@@ -42,6 +42,60 @@
 (defprotocol IPull
   (-pull! [this] "basically IDeref"))
 
+(defprotocol ISlice
+  (-slice [this path]))
+
+(deftype Cursor [root path]
+  IPull
+  (-pull! [this]
+    (get-in (-pull! root) path))
+
+  IDeref
+  (-deref [_]
+    (get-in @root path))
+
+  IWatchable
+  (-add-watch [this key callback]
+    (-add-watch root key callback))
+  (-remove-watch [this key]
+    (-remove-watch root key))
+
+  IEquiv
+  (-equiv [this other]
+    (and (instance? Cursor other)
+         (-equiv root (.-root other))
+         (-equiv path (.-path other))))
+
+  ISlice
+  (-slice [this new-path]
+    (Cursor. root (into path new-path)))
+
+  IHash
+  (-hash [this]
+    (js/goog.getUid this))
+  
+  IPrintWithWriter
+  (-pr-writer [_ w opts]
+    (-write w "#<Cursor ")
+    (-pr-writer path w opts)
+    (-write w " ")
+    (-pr-writer root w opts)
+    (-write w ">"))
+  
+  Object
+  (toString [this]
+    (str "#<Cursor " path " " root ">")))
+
+(extend-protocol ISlice
+  Atom
+  (-slice [this path]
+    (Cursor. this path)))
+
+(defn cursor [src path]
+  (if (sequential? path)
+    (-slice src path)
+    (-slice src [path])))
+
 (defn update!
   ([target target-fn]
      (-update! target target-fn))
@@ -160,7 +214,8 @@
     (el-ctor scope el-attr el-init children)))
 
 (defn- process-all! [items]
-  (reduce (fn [_ item] (process-frame! item)) nil items))
+  (doseq [item items]
+    (process-frame! item)))
 
 (defn filter-by-id [current filter-id]
   (->> current
