@@ -40,23 +40,6 @@
       (str/replace #"_" "-")
       ))
 
-(defn get-func-signature [func]
-  (let [name (.-name func)]
-    (when (seq name)
-      (let [[_ ns fn-name line :as x] (re-find #"fn_(.+)_SLASH_(.+)_(\d+)" name)]
-        (if x
-          (str (unmunge ns) "/" (unmunge fn-name) " line:" line)
-          name)))
-    ))
-
-(extend-type function
-  IPrintWithWriter
-  (-pr-writer [this writer opts]
-    (if-let [sig (get-func-signature this)]
-      (-write writer (str "#<function " sig ">"))
-      (-write writer (str "#<" this ">"))
-      )))
-
 (define-event :init
   "object initialization"
   [])
@@ -671,28 +654,6 @@
 
        coll-dom)))
 
-(defn remove-from-vector [coll key]
-  (log "remove-from-vector" key coll)
-  (let [c (count coll)]
-    (cond
-     (= 0 key) (vec (rest coll))
-     (= (dec c) key) (vec (butlast coll))
-     :else ;; item in teh middle
-     (vec (concat (subvec coll 0 key)
-                  (subvec coll (inc key) c))))
-    ))
-
-(defn remove-item-from-coll [coll key value]
-  (cond
-   (satisfies? IVector coll)
-   (remove-from-vector coll key)
-   (satisfies? IMap coll)
-   (dissoc coll key)
-   (satisfies? ISet coll)
-   (disj coll value)
-   :else (throw (ex-info "unknown coll type" {:coll coll :key key :value value}))
-   ))
-
 (defn remove-in-parent! [oref]
   (let [parent (get-parent oref)
         key (::coll-key oref)
@@ -703,7 +664,7 @@
       (throw (ex-info "remove-in-parent! should only be called from items created via so/bind-children" {:oref oref})))
 
     (let [coll (get-in parent path)
-          new-coll (remove-item-from-coll coll key value)]
+          new-coll (util/remove-item-from-coll coll key value)]
       (notify! parent :bind/update path new-coll))
     ))
 

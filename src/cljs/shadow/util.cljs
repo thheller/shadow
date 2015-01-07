@@ -79,3 +79,22 @@
         ))
 
 
+(defn remove-from-vector [coll key]
+  (->> (map-indexed vector coll)
+       (reduce (fn [v [idx item]]
+                 (if (= idx key)
+                   v
+                   (conj! v item)))
+               (transient []))
+       (persistent!)))
+
+(defn remove-item-from-coll [coll key value]
+  (cond
+   (satisfies? IVector coll)
+   (remove-from-vector coll key)
+   (satisfies? IMap coll)
+   (dissoc coll key)
+   (satisfies? ISet coll)
+   (disj coll value)
+   :else (throw (ex-info "unknown coll type" {:coll coll :key key :value value}))
+   ))

@@ -47,27 +47,23 @@
   (-ref-inc! [this])
   (-ref-dec! [this]))
 
-(declare queue-frame!)
+(declare queue-frame! update!)
 
-(deftype Cursor [id root path ^:mutable ref-count]
+(deftype Cursor [id parent path]
   IDeref
   (-deref [_]
-    (get-in @root path))
+    (get-in @parent path))
   
   IRefCounted
   (-ref-inc! [this]
-    (when (zero? ref-count)
-      ;; if something references us and our value changes we need to queue a frame
-      (add-watch root id (fn [_ _ ov nv]
-                           (when (not= (get-in ov path)
-                                       (get-in nv path))
-                             (queue-frame!)))))
-    (set! ref-count (inc ref-count)))
+    (-ref-inc! parent))
 
   (-ref-dec! [this]
-    (set! ref-count (dec ref-count))
-    (when (zero? ref-count)
-      (remove-watch root id)))
+    (-ref-dec! parent))
+  
+  IUpdate
+  (-update! [this update-fn]
+    (update! parent update-in path update-fn))
 
   IEquiv
   (-equiv [this other]
@@ -77,7 +73,7 @@
   ISlice
   (-slice [this new-path]
     (let [id (next-id)]
-      (Cursor. id root (into path new-path) 0)))
+      (Cursor. id this new-path)))
 
   IHash
   (-hash [this]
@@ -88,23 +84,50 @@
     (-write w "#<Cursor ")
     (-pr-writer path w opts)
     (-write w " ")
-    (-pr-writer root w opts)
+    (-pr-writer parent w opts)
     (-write w ">"))
   
   Object
   (toString [this]
-    (str "#<Cursor " path " " root ">")))
+    (str "#<Cursor " path " " parent ">")))
 
-(extend-protocol ISlice
-  Atom
-  (-slice [this path]
+(deftype RootCursor [id root ^:mutable ref-count]
+  IDeref
+  (-deref [_] @root)
+
+  ISlice
+  (-slice [this new-path]
     (let [id (next-id)]
-      (Cursor. id this path 0))))
+      (Cursor. id this new-path)))
+  
+  IUpdate
+  (-update! [this update-fn]
+    (swap! root update-fn))
+  
+  IRefCounted
+  (-ref-inc! [this]
+    (when (zero? ref-count)
+      ;; if something references us and our value changes we need to queue a frame
+      (add-watch root id (fn [_ _ _ _] (queue-frame!))))
+    (set! ref-count (inc ref-count)))
+  (-ref-dec! [this]
+    (set! ref-count (dec ref-count))
+    (when (zero? ref-count)
+      (remove-watch root id)))
+
+  IPrintWithWriter
+  (-pr-writer [_ w opts]
+    (-write w "#<RootCursor :ref-count ")
+    (-write w (str ref-count))
+    (-write w ">")))
 
 (defn cursor [src path]
   (if (sequential? path)
     (-slice src path)
     (-slice src [path])))
+
+(defn root-cursor [atom]
+  (RootCursor. (next-id) atom 0))
 
 (defn update!
   ([target target-fn]
@@ -383,7 +406,7 @@
                          ;; if the key stays the same don't fully swap the object
                          (update outer-el old-el old-val new-val)
                          
-                         (let [new-def (dom new-val)
+                         (let [new-def (dom new-val cursor)
                                ;; if no node needs to be constructed at this point
                                ;; just use empty text node as a placeholder
                                new-el (-construct (if (nil? new-def) "" new-def) inner-scope)]
@@ -415,7 +438,7 @@
              (dom/replace-node old-el placeholder) 
              (when (satisfies? IDestruct old-el)
                (destroy! old-el)))
-   :dom (fn [val] val)})
+   :dom (fn [val cursor] val)})
 
 (defn <$
   "<$ read as \"at this position in the tree\""
@@ -548,13 +571,14 @@
       (set! (.-owner scope) nil)
       (destroy! scope)
       
+      (when dom
+        (aset (dom/dom-node dom) "$$owner" nil)
+        (dom/remove dom))
+      
       ;; FIXME: should we remove dom first?
       (when ret-val
         (async/put! chan ret-val))
       (async/close! chan)
-
-      (when dom
-        (dom/remove dom))
       ))
   
   IDeref
