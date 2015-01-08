@@ -1,7 +1,7 @@
 (ns shadow.test-app
   (:require-macros [cljs.core.async.macros :refer (go alt!)])
   (:require [cljs.core.async :as async]
-            [shadow.components :as sc :refer ($ <$ defc)]
+            [shadow.components :as sc :refer ($ <$ <$* defc)]
             [shadow.util :as util :refer (log with-timing)]
             [shadow.api :as api :refer (ns-ready)]
             [shadow.html :as html]
@@ -13,8 +13,9 @@
             ))
 
 (defn object-title
-  [{:keys [id name] :as object}]
-  (str "object #" id " - " name))
+  [cursor]
+  (let [ {:keys [id name]} @cursor]
+    (str "object #" id " - " name)))
 
 (def div-title
   (html/div {:class "title"}))
@@ -31,147 +32,36 @@
          ($ html/div
             ($ html/h2 "OBJECT!")
             ($ div-title (<$ object-c object-title))
-            (<$ (sc/cursor object-c [:i]))
+            (<$ (sc/slice object-c [:i]))
             )))
 
 (defn inc-clicks [data e el]
   (sc/update! data update :clicks inc))
 
 (defn clicks-text [clicks]
-  (cond
-   (zero? clicks)
-   "No clicks? :("
+  (let [val @clicks]
+    (cond
+     (zero? val)
+     "No clicks? :("
 
-   (= clicks 1)
-   "Only once?"
+     (= val 1)
+     "Only once?"
 
-   (< clicks 25)
-   (str clicks " Clicks!")
-   
-   :else
-   (str clicks " Clicks! Sir Click-A-Lot!")
-   ))
+     (< val 25)
+     (str val " Clicks!")
+     
+     :else
+     (str val " Clicks! Sir Click-A-Lot!")
+     )))
 
-(defn dom-index-of [el]
-  (loop [el (dom/dom-node el)
-         i 0]
-    (let [ps (.-previousSibling el)]
-      (if (nil? ps)
-        i
-        (recur ps (inc i))
-        ))))
-
-(defn <$* [cursor opts]
-  (reify
-    sc/IDynamicElement
-    (-insert-element! [_ outer-scope outer-el]
-      (let [{:keys [key dom]} opts
-            inner-scope (sc/new-scope "<$*" outer-scope)
-            
-            outer-dom (dom/dom-node outer-el)
-
-            key->idx (volatile! {})
-            idx->key (volatile! [])
-            idx->item (volatile! [])
-            
-            marker (js/document.createTextNode "")
-            _ (.appendChild outer-dom marker)
-            
-            make-el (fn [item item-cursor]
-                      (let [item-def (dom item item-cursor)]
-                        (sc/-construct (if (nil? item-def) "" item-def) inner-scope)
-                        ))
-
-            callback (fn [action old-val new-val]
-                       (when-not (vector? new-val)
-                         (throw (ex-info "not a vector" {:new-val new-val})))
-
-                       (if (nil? old-val)
-                         ;; first run only?
-                         (doseq [[idx item] (map-indexed vector new-val)]
-                           (let [item-cursor (sc/cursor cursor [idx])
-                                 item-key (key item)
-                                 item-el (make-el item item-cursor)]
-                             (vswap! key->idx assoc item-key idx)
-                             (vswap! idx->key assoc idx item-key)
-                             (vswap! idx->item assoc idx item-cursor)
-                             (dom/append outer-el item-el)
-                             ))
-
-                         (let [child-nodes (.-childNodes (dom/dom-node outer-el))
-                               offset (inc (dom-index-of marker))
-                               new-c (count new-val)
-                               prev-c (count old-val)
-                               diff (- new-c prev-c)]
-                           
-                           (when (neg? diff)
-                             (let [new-keys (into #{} (map key new-val))]
-                               (doseq [[key idx] @key->idx]
-                                 (when-not (contains? new-keys key)
-                                   (let [prev-el (aget outer-dom "childNodes" (+ offset idx))]
-                                     (vswap! key->idx dissoc key)
-                                     (vswap! idx->item util/remove-from-vector idx)
-                                     (vswap! idx->key util/remove-from-vector idx)
-                                     (if-let [owner (aget prev-el "$$owner")]
-                                       (sc/destroy! owner)
-                                       (dom/remove prev-el)))))
-                               
-                               (doseq [[idx child-cursor] (map-indexed vector @idx->item)]
-                                 (set! (.-path child-cursor) [idx])
-                                 )))
-
-                           ;; FIXME: very naive implementation
-                           ;; could move nodes arround if their position changed
-                           ;; now just destroys/creates nodes if keys don't match
-                           ;; works well enough for now
-                           (dotimes [idx (min prev-c new-c)]
-                             (let [current-el (aget child-nodes (+ offset idx))
-                                   item (nth new-val idx)
-                                   item-key (key item)
-                                   prev-key (get @idx->key idx)]
-                               (if (= item-key prev-key)
-                                 ;; item-key didn't change, but index may have changed
-                                 (do (when (not= idx (get @key->idx item-key))
-                                       (vswap! key->idx assoc item-key idx))
-                                     nil)
-                                 ;; item-key changed, swap in new item, destroy old
-                                 (let [item-cursor (sc/cursor cursor [idx])
-                                       item-el (make-el item item-cursor)]
-                                   
-                                   (vswap! key->idx dissoc prev-key)
-                                   (vswap! idx->key assoc idx item-key)
-                                   (vswap! idx->item assoc idx item-cursor)
-                                   (vswap! key->idx assoc item-key idx)
-                                   (dom/replace-node current-el item-el)
-                                   (when-let [owner (aget current-el "$$owner")]
-                                     (sc/destroy! owner))))))
-
-                           (when (pos? diff)
-                             (loop [idx prev-c
-                                    new-items (subvec new-val prev-c)
-                                    last-el (aget child-nodes prev-c)]
-                               (when (seq new-items)
-                                 (let [item (first new-items)
-                                       item-key (key item)
-                                       item-cursor (sc/cursor cursor [idx])
-                                       item-el (make-el item item-cursor)]
-                                   (vswap! idx->item assoc idx item-cursor)
-                                   (vswap! idx->key assoc idx item-key)
-                                   (vswap! key->idx assoc item-key idx)
-                                   (dom/insert-after last-el item-el)
-                                   (recur (inc idx) (rest new-items) item-el)
-                                   )))))))]
-        
-        (.execute! (sc/scope-action inner-scope cursor callback)))
-      )))
 
 (defc coll-item-view
   :dom (fn [{:keys [item] :as this}]
          ($ (html/li
              (sc/on :click #(sc/update! item update-in [:x] inc)))
-            (<$ (sc/cursor item :name))
+            (<$ (sc/slice item :name))
             " x: "
-            (<$ (sc/cursor item :x))
+            (<$ (sc/slice item :x))
             )))
 
 (defc test-component
@@ -180,14 +70,14 @@
   :dom/init (fn [this el])
   
   :dom (fn [{:keys [data] :as this} _]
-         (let [object-c (sc/cursor data :object)]
+         (let [object-c (sc/slice data :object)]
            ($ html/div
               ($ html/h1
                  "Hello "
-                 (<$ (sc/cursor data [:name])
-                     (fn [value cursor]
-                       (if (seq value)
-                         value
+                 (<$ (sc/slice data [:name])
+                     (fn [cursor]
+                       (if (seq @cursor)
+                         @cursor
                          "Stranger")))
                  "!")
               
@@ -225,9 +115,9 @@
                  "remove last item")
 
               ($ html/ul
-                 (<$* (sc/cursor data :coll)
+                 (<$* (sc/slice data :coll)
                       {:key :id
-                       :dom (fn [data cursor]
+                       :dom (fn [cursor]
                               (coll-item-view {:item cursor}))}))
               
 
@@ -250,7 +140,7 @@
                        "Click me, I do Stuff!"))
 
                  ($ div-form-group
-                    (<$ (sc/cursor data [:clicks]) clicks-text)))
+                    (<$ (sc/slice data [:clicks]) clicks-text)))
               
 
               ($ html/div
@@ -290,8 +180,8 @@
               
               (<$ object-c
                   {:key :id
-                   :dom (fn [data cursor]
-                          (when data
+                   :dom (fn [cursor]
+                          (when @cursor
                             ($ (object-display {:object-c cursor}
                                                (sc/set-ref this [:refs :display])
                                                (fn [el scope]
@@ -305,7 +195,7 @@
 
 (def test-data (atom {:name ""
                       :clicks 0
-                      :coll (into [] (for [i (range 50)]
+                      :coll (into [] (for [i (range 10)]
                                        {:id i
                                         :name (str "item" i)
                                         :x 0}))}))

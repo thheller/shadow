@@ -403,7 +403,7 @@
                                   v)))))
 
 (defn px [value]
-  (str value "px"))
+  (str (int value) "px"))
 
 (defn pct [value]
   (str value "%"))
@@ -477,6 +477,15 @@
   (if-let [child (.-firstChild (dom-node ref))]
     (insert-before child new)
     (append ref new)))
+
+(defn index-of [el]
+  (loop [el (dom-node el)
+         i 0]
+    (let [ps (.-previousSibling el)]
+      (if (nil? ps)
+        i
+        (recur ps (inc i))
+        ))))
 
 (defn get-parent [el]
   (dom/getParentElement (dom-node el)))

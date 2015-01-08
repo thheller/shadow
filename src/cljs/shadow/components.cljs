@@ -3,12 +3,15 @@
                    [cljs.core.async.macros :refer (go alt!)])
   (:require [cljs.core.async :as async]
             [cljs.core.async.impl.protocols :as async-protocols]
+            [goog.dom.animationFrame.polyfill :as raf-polyfill]
 
             [clojure.string :as str]
             [goog.string :as gstr]
             
             [shadow.util :as util :refer (log)]
             [shadow.dom :as dom]))
+
+(raf-polyfill/install)
 
 (def next-id
   (let [id-obj #js {:id 0}]
@@ -121,10 +124,12 @@
     (-write w (str ref-count))
     (-write w ">")))
 
-(defn cursor [src path]
+(defn slice [src path]
+  (when-not (satisfies? ISlice src)
+    (throw (ex-info "cannot slice into src" {:src src :path path})))
   (if (sequential? path)
-    (-slice src path)
-    (-slice src [path])))
+    (-slice ^not-native src path)
+    (-slice ^not-native src [path])))
 
 (defn root-cursor [atom]
   (RootCursor. (next-id) atom 0))
@@ -406,7 +411,7 @@
                          ;; if the key stays the same don't fully swap the object
                          (update outer-el old-el old-val new-val)
                          
-                         (let [new-def (dom new-val cursor)
+                         (let [new-def (dom cursor)
                                ;; if no node needs to be constructed at this point
                                ;; just use empty text node as a placeholder
                                new-el (-construct (if (nil? new-def) "" new-def) inner-scope)]
@@ -438,7 +443,7 @@
              (dom/replace-node old-el placeholder) 
              (when (satisfies? IDestruct old-el)
                (destroy! old-el)))
-   :dom (fn [val cursor] val)})
+   :dom (fn [cursor] @cursor)})
 
 (defn <$
   "<$ read as \"at this position in the tree\""
@@ -463,6 +468,118 @@
                  (throw (ex-info "invalid argument to dynamic element" {:opts opts})))]
 
        (DynamicElement. cursor opts))))
+
+(deftype KeyedCollection [outer-cursor opts]
+  IDynamicElement
+  (-insert-element! [_ outer-scope outer-el]
+    (let [{:keys [key dom]} opts
+          inner-scope (new-scope "<$*" outer-scope)
+            
+          outer-dom (dom/dom-node outer-el)
+
+          key->idx (volatile! {})
+          idx->key (volatile! [])
+          idx->item (volatile! [])
+            
+          marker (js/document.createTextNode "")
+          _ (.appendChild outer-dom marker)
+            
+          make-el (fn [item item-cursor]
+                    (let [item-def (dom item-cursor)]
+                      (-construct (if (nil? item-def) "" item-def) inner-scope)
+                      ))
+
+          callback (fn [action old-val new-val]
+                     (when-not (vector? new-val)
+                       (throw (ex-info "not a vector" {:new-val new-val})))
+
+                     (if (nil? old-val)
+                       ;; first run only?
+                       (doseq [[idx item] (map-indexed vector new-val)]
+                         (let [item-cursor (slice outer-cursor [idx])
+                               item-key (key item)
+                               item-el (make-el item item-cursor)]
+                           (vswap! key->idx assoc item-key idx)
+                           (vswap! idx->key assoc idx item-key)
+                           (vswap! idx->item assoc idx item-cursor)
+                           (dom/append outer-el item-el)
+                           ))
+
+                       (let [child-nodes (.-childNodes (dom/dom-node outer-el))
+                             offset (inc (dom/index-of marker))
+                             new-c (count new-val)
+                             prev-c (count old-val)
+                             diff (- new-c prev-c)]
+                           
+                         (when (neg? diff)
+                           (let [new-keys (into #{} (map key new-val))]
+                             (doseq [[key idx] @key->idx]
+                               (when-not (contains? new-keys key)
+                                 (let [prev-el (aget outer-dom "childNodes" (+ offset idx))]
+                                   (vswap! key->idx dissoc key)
+                                   (vswap! idx->item util/remove-from-vector idx)
+                                   (vswap! idx->key util/remove-from-vector idx)
+                                   (if-let [owner (aget prev-el "$$owner")]
+                                     (destroy! owner)
+                                     (dom/remove prev-el)))))
+                               
+
+                             ;; FIXME: protocolize this somehow
+                             ;; changing the path of the cursor cause the may have been moved
+                             (doseq [[idx child-cursor] (map-indexed vector @idx->item)]
+                               (set! (.-path child-cursor) [idx])
+                               )))
+
+                         ;; FIXME: very naive implementation
+                         ;; could move nodes arround if their position changed
+                         ;; now just destroys/creates nodes if keys don't match
+                         ;; works well enough for now
+                         (dotimes [idx (min prev-c new-c)]
+                           (let [current-el (aget child-nodes (+ offset idx))
+                                 item (nth new-val idx)
+                                 item-key (key item)
+                                 prev-key (get @idx->key idx)]
+                             (if (= item-key prev-key)
+                               ;; item-key didn't change, but index may have changed
+                               (do (when (not= idx (get @key->idx item-key))
+                                     (vswap! key->idx assoc item-key idx))
+                                   nil)
+                               ;; item-key changed, swap in new item, destroy old
+                               (let [item-cursor (slice outer-cursor [idx])
+                                     item-el (make-el item item-cursor)]
+                                   
+                                 (vswap! key->idx dissoc prev-key)
+                                 (vswap! idx->key assoc idx item-key)
+                                 (vswap! idx->item assoc idx item-cursor)
+                                 (vswap! key->idx assoc item-key idx)
+                                 (dom/replace-node current-el item-el)
+                                 (when-let [owner (aget current-el "$$owner")]
+                                   (destroy! owner))))))
+
+                         (when (pos? diff)
+                           (loop [idx prev-c
+                                  new-items (subvec new-val prev-c)
+                                  last-el (aget child-nodes prev-c)]
+                             (when (seq new-items)
+                               (let [item (first new-items)
+                                     item-key (key item)
+                                     item-cursor (slice outer-cursor [idx])
+                                     item-el (make-el item item-cursor)]
+                                 (vswap! idx->item assoc idx item-cursor)
+                                 (vswap! idx->key assoc idx item-key)
+                                 (vswap! key->idx assoc item-key idx)
+                                 (dom/insert-after last-el item-el)
+                                 (recur (inc idx) (rest new-items) item-el)
+                                 )))))))]
+        
+      (.execute! (scope-action inner-scope outer-cursor callback)))
+    ))
+
+(defn <$*
+  "takes a cursor to a vector and create/destroys dom nodes accoring to content
+   will call :dom for each item in the vector"
+  [outer-cursor opts]
+  (KeyedCollection. outer-cursor opts))
 
 (defn construct
   ([el]

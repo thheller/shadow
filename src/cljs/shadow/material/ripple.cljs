@@ -15,6 +15,7 @@
 ;; FIXME: paper does custom animation through rAF
 ;; FIXME: this is really bad performance wise, creating/destroying objects all the time
 ;; FIXME: although that doesn't matter cause you have to click really fast to notice
+;; FIXME: position is incorrect when scrolling
 
 (defc sm-ripple
   :dom (fn [this _]
@@ -45,11 +46,11 @@
                               :z-index "1"})
 
     (dom/set-style wave {:position "relative"
-                         :width (dom/px 6)
-                         :height (dom/px 6)
+                         :width "6px"
+                         :height "6px"
                          :left (-> ex (- x) dom/px)
                          :top (-> ey (- y) dom/px)
-                         :border-radius (dom/pct 50)})
+                         :border-radius "50%"})
     
     (anim/init! grow)
     (dom/append container wave)
