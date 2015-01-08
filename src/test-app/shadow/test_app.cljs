@@ -57,12 +57,46 @@
 
 (defc coll-item-view
   :dom (fn [{:keys [item] :as this}]
-         ($ (html/li
-             (sc/on :click #(sc/update! item update-in [:x] inc)))
+         ($ html/li
+            ($ (html/button
+                (sc/on :click (fn [e el]
+                                (dom/ev-stop e)
+                                (sc/update! item update-in [:x] inc))))
+               "click me")
+            ;; [item :name] -- sugar?
             (<$ (sc/slice item :name))
             " x: "
+            ;; [item :x] -- sugar?
             (<$ (sc/slice item :x))
             )))
+
+(defn replace-random-item [data]
+  (let [now (.getTime (js/Date.))]
+    (sc/update! data update-in [:coll] (fn [coll]
+                                         (assoc coll
+                                           (int (rand (count coll)))
+                                           {:id now
+                                            :name (str "item" now)})))))
+
+(defn remove-random-item [data]
+  (let [now (.getTime (js/Date.))]
+    (sc/update! data update-in [:coll] (fn [coll]
+                                         (let [idx (int (rand (count coll)))]
+                                           (util/remove-from-vector coll idx))
+                                         ))))
+
+(defn add-item [data]
+  (let [now (.getTime (js/Date.))]
+    (sc/update! data update-in [:coll] conj {:id now
+                                             :name (str "item" now)})))
+
+(defn remove-first-item [data]
+  (let [now (.getTime (js/Date.))]
+    (sc/update! data update-in [:coll] (fn [coll] (into [] (rest coll))))))
+
+(defn remove-last-item [data]
+  (let [now (.getTime (js/Date.))]
+    (sc/update! data update-in [:coll] (fn [coll] (into [] (butlast coll))))))
 
 (defc test-component
   :init (fn [this])
@@ -82,49 +116,44 @@
                  "!")
               
               ($ (html/button
-                  (sc/on :click #(let [now (.getTime (js/Date.))]
-                                   (sc/update! data update-in [:coll] conj {:id now
-                                                                            :name (str "item" now)}))))
+                  (sc/on :click #(add-item data)))
                  "add item")
 
               ($ (html/button
-                  (sc/on :click #(let [now (.getTime (js/Date.))]
-                                   (sc/update! data update-in [:coll] (fn [coll]
-                                                                        (assoc coll
-                                                                          (int (rand (count coll)))
-                                                                          {:id now
-                                                                           :name (str "item" now)}))))))
+                  (sc/on :click #(dotimes [i 100]
+                                   (add-item data))))
+                 "add 100 items")
+
+              ($ (html/button
+                  (sc/on :click #(replace-random-item data)))
                  "replace random item")
 
               ($ (html/button
-                  (sc/on :click #(let [now (.getTime (js/Date.))]
-                                   (sc/update! data update-in [:coll] (fn [coll]
-                                                                        (let [idx (int (rand (count coll)))]
-                                                                          (util/remove-from-vector coll idx))
-                                                                        )))))
+                  (sc/on :click #(remove-random-item data)))
                  "remove random item")
 
               ($ (html/button
-                  (sc/on :click #(let [now (.getTime (js/Date.))]
-                                   (sc/update! data update-in [:coll] (fn [coll] (into [] (rest coll)))))))
+                  (sc/on :click #(remove-first-item data)))
                  "remove first item")
 
               ($ (html/button
-                  (sc/on :click #(let [now (.getTime (js/Date.))]
-                                   (sc/update! data update-in [:coll] (fn [coll] (into [] (butlast coll)))))))
+                  (sc/on :click #(remove-last-item data)))
                  "remove last item")
 
               ($ html/ul
+                 
+                 ($ html/li "this is not managed")
+
                  (<$* (sc/slice data :coll)
                       {:key :id
                        :dom (fn [cursor]
-                              (coll-item-view {:item cursor}))}))
+                              (coll-item-view {:item cursor}))})
+
+                 ($ html/li "this is not managed"))
               
 
               ($ (html/form
-                  (sc/on :submit (fn [e el]
-                                   (dom/ev-stop e)
-                                   (log "cancelled submit" e el))))
+                  (sc/on :submit dom/ev-stop))
 
                  ($ div-form-group
                     ($ html/label "What is your name?")

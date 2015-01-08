@@ -58,9 +58,6 @@
 (def build dom-node)
 
 (defn ev-stop 
-  ([e el]
-     (ev-stop e)
-     el)
   ([e]
      (if (.-stopPropagation e)
        (do
@@ -69,7 +66,14 @@
        (do
          (set! (.-cancelBubble e) true)
          (set! (.-returnValue e) false)))
-     e))
+     e)
+  ([e el]
+     (ev-stop e)
+     el)
+  ;; new arity for sc/on
+  ([e el scope owner]
+     (ev-stop e)
+     el))
 
 (defn contains?
   "check wether a parent node (or the document) contains the child"
