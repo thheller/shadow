@@ -61,8 +61,10 @@
             ($ (html/button
                 (sc/on :click (fn [e el]
                                 (dom/ev-stop e)
+                                (log "item cursor" item)
                                 (sc/update! item update-in [:x] inc))))
                "click me")
+            " "
             ;; [item :name] -- sugar?
             (<$ (sc/slice item :name))
             " x: "
@@ -70,25 +72,31 @@
             (<$ (sc/slice item :x))
             )))
 
+(def next-id
+  (let [id-seq (atom 0)]
+    (fn []
+      (str "$$next-id" (swap! id-seq inc)))))
+
 (defn replace-random-item [data]
-  (let [now (.getTime (js/Date.))]
+  (let [id (next-id)]
     (sc/update! data update-in [:coll] (fn [coll]
                                          (assoc coll
                                            (int (rand (count coll)))
-                                           {:id now
-                                            :name (str "item" now)})))))
+                                           {:id id
+                                            :name (str "item" id)
+                                            :x 0})))))
 
 (defn remove-random-item [data]
-  (let [now (.getTime (js/Date.))]
-    (sc/update! data update-in [:coll] (fn [coll]
-                                         (let [idx (int (rand (count coll)))]
-                                           (util/remove-from-vector coll idx))
-                                         ))))
+  (sc/update! data update-in [:coll] (fn [coll]
+                                       (let [idx (int (rand (count coll)))]
+                                         (util/remove-from-vector coll idx))
+                                       )))
 
 (defn add-item [data]
-  (let [now (.getTime (js/Date.))]
-    (sc/update! data update-in [:coll] conj {:id now
-                                             :name (str "item" now)})))
+  (let [id (next-id)]
+    (sc/update! data update-in [:coll] conj {:id id
+                                             :name (str "item" id)
+                                             :x 0})))
 
 (defn remove-first-item [data]
   (let [now (.getTime (js/Date.))]

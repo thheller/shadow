@@ -257,8 +257,12 @@
 
 (defn filter-by-id [current filter-id]
   (->> current
-       (remove #(= filter-id (.-id %)))
-       (into [])))
+       (reduce (fn [next item]
+                 (if (= filter-id (.-id item))
+                   next
+                   (conj! next item)))
+               (transient []))
+       (persistent!)))
 
 
 ;; naming things is hard, Scope and ScopeAction suck!
@@ -489,7 +493,7 @@
                       (-construct (if (nil? item-def) "" item-def) inner-scope)
                       ))
 
-          callback (fn [action old-val new-val]
+          callback (fn keyed-collection-frame [action old-val new-val]
                      (when-not (vector? new-val)
                        (throw (ex-info "not a vector" {:new-val new-val})))
 
@@ -559,7 +563,7 @@
                          (when (pos? diff)
                            (loop [idx prev-c
                                   new-items (subvec new-val prev-c)
-                                  last-el (aget child-nodes prev-c)]
+                                  last-el (aget child-nodes (+ offset idx -1))]
                              (when (seq new-items)
                                (let [item (first new-items)
                                      item-key (key item)
