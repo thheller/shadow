@@ -106,6 +106,9 @@
   (let [now (.getTime (js/Date.))]
     (sc/update! data update-in [:coll] (fn [coll] (into [] (butlast coll))))))
 
+(defn remove-all [data]
+  (sc/update! data assoc :coll []))
+
 (defc test-component
   :init (fn [this])
 
@@ -123,41 +126,27 @@
                          "Stranger")))
                  "!")
               
-              ($ (html/button
-                  (sc/on :click #(add-item data)))
-                 "add item")
-
-              ($ (html/button
-                  (sc/on :click #(dotimes [i 100]
-                                   (add-item data))))
-                 "add 100 items")
-
-              ($ (html/button
-                  (sc/on :click #(replace-random-item data)))
-                 "replace random item")
-
-              ($ (html/button
-                  (sc/on :click #(remove-random-item data)))
-                 "remove random item")
-
-              ($ (html/button
-                  (sc/on :click #(remove-first-item data)))
-                 "remove first item")
-
-              ($ (html/button
-                  (sc/on :click #(remove-last-item data)))
-                 "remove last item")
+              (for [[title action] [["add item" #(add-item data)]
+                                    ["add 200 items" #(dotimes [i 200] (add-item data))]
+                                    ["replace random item" #(replace-random-item data)]
+                                    ["remove random item" #(remove-random-item data)]
+                                    ["remove first item" #(remove-first-item data)]
+                                    ["remove last item" #(remove-last-item data)]
+                                    ["remove all" #(remove-all data)]]]
+                ($ (html/button
+                    (sc/on :click action))
+                   title))
 
               ($ html/ul
                  
-                 ($ html/li "this is not managed")
+                 ($ html/li "before (unmanaged)")
 
                  (<$* (sc/slice data :coll)
                       {:key :id
                        :dom (fn [cursor]
                               (coll-item-view {:item cursor}))})
 
-                 ($ html/li "this is not managed"))
+                 ($ html/li "after (unmanaged)"))
               
 
               ($ (html/form
@@ -232,10 +221,7 @@
 
 (def test-data (atom {:name ""
                       :clicks 0
-                      :coll (into [] (for [i (range 10)]
-                                       {:id i
-                                        :name (str "item" i)
-                                        :x 0}))}))
+                      :coll []}))
 
 (def root-c (atom nil))
 

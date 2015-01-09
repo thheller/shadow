@@ -8,7 +8,7 @@
             [clojure.string :as str]
             [goog.string :as gstr]
             
-            [shadow.util :as util :refer (log)]
+            [shadow.util :as util :refer (log doarray)]
             [shadow.dom :as dom]))
 
 (raf-polyfill/install)
@@ -488,7 +488,7 @@
           marker (js/document.createTextNode "")
           _ (.appendChild outer-dom marker)
             
-          make-el (fn [item item-cursor]
+          make-el (fn keyed-collection-make-el [item item-cursor]
                     (let [item-def (dom item-cursor)]
                       (-construct (if (nil? item-def) "" item-def) inner-scope)
                       ))
@@ -509,23 +509,30 @@
                            (dom/append outer-el item-el)
                            ))
 
-                       (let [child-nodes (.-childNodes (dom/dom-node outer-el))
+                       (let [child-nodes (.-childNodes outer-dom)
                              offset (inc (dom/index-of marker))
                              new-c (count new-val)
                              prev-c (count old-val)
                              diff (- new-c prev-c)]
                            
                          (when (neg? diff)
-                           (let [new-keys (into #{} (map key new-val))]
+                           (let [new-keys (into #{} (map key new-val))
+                                 destroy-these (array)]
                              (doseq [[key idx] @key->idx]
                                (when-not (contains? new-keys key)
-                                 (let [prev-el (aget outer-dom "childNodes" (+ offset idx))]
+                                 (let [prev-el (aget child-nodes (+ offset idx))]
                                    (vswap! key->idx dissoc key)
                                    (vswap! idx->item util/remove-from-vector idx)
                                    (vswap! idx->key util/remove-from-vector idx)
-                                   (if-let [owner (aget prev-el "$$owner")]
-                                     (destroy! owner)
-                                     (dom/remove prev-el)))))
+                                   ;; must delay removal since we access child-nodes which is mutable
+                                   ;; alternative would be to put child-nodes into a vector first
+                                   (.push destroy-these prev-el)
+                                   )))
+
+                             (doarray [it destroy-these]
+                                      (if-let [owner (aget it "$$owner")]
+                                        (destroy! owner)
+                                        (dom/remove it)))
                                
 
                              ;; FIXME: protocolize this somehow
