@@ -35,6 +35,47 @@
      .scope-children {
        padding-left: 20px;
      }
+     
+
+     .sm-tabs {
+       display: flex;
+       flex-direction: row;
+       align-items: center;
+       -webkit-user-select: none;
+       height: 48px;
+       overflow: hidden;
+       position: relative;
+     }
+     
+     .sm-tabs .sm-tab {
+       display: inline-flex;
+       flex-direction: row;
+       align-items: center;
+       justify-content: center;
+       height: 100%;
+       text-align: center;
+       flex: 1;
+       flex-basis: auto;
+       height: 100%;
+       font-size: 14px; 
+       transition: opacity .1s cubic-bezier(0.4, 0.0, 1, 1), color .1s cubic-bezier(0.4, 0.0, 1, 1);
+       opacity: 0.6;
+       font-weight: bold;
+     }
+     
+     .sm-tabs .tab-selected {
+       opacity: 1;
+     }
+     
+     .sm-tabs .selection-bar {
+       position: absolute;
+       height: 2px;
+       bottom: 0;
+       left: 0;
+       width: 0;
+       background-color: #000;
+       transition: width, left;
+     }
     </style>
   </head>
   <body>

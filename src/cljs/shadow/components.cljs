@@ -686,7 +686,8 @@
      ^:mutable ret-val
      state ;; local state
      ^:mutable dom
-     ^:mutable alive?]
+     ^:mutable alive?
+     ^:mutable ref-count]
   IScoped
   (-get-scope [_]
     scope)
@@ -709,10 +710,24 @@
       (async/close! chan)
       ))
   
+  ISlice
+  (-slice [this path]
+    (Cursor. (next-id) this path))
+  
   IDeref
   (-deref [_]
     @state)
   
+  IRefCounted
+  (-ref-inc! [this]
+    (when (zero? ref-count)
+      (add-watch state id (fn [_ _ _ _] (queue-frame!))))
+    (set! ref-count (inc ref-count)))
+  (-ref-dec! [this]
+    (set! ref-count (dec ref-count))
+    (when (zero? ref-count)
+      (remove-watch state id)))
+
   IWatchable
   (-add-watch [_ key callback]
     (-add-watch state key callback))
@@ -773,7 +788,7 @@
         ;; all should get the return val, not just one lucky one
         chan (async/chan 1)
         
-        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) nil true)]
+        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) nil true 0)]
     
     ;; FIXME: if any of this fails we leak an Instance
     ;;        which is semi constructed but may already have watches & stuff

@@ -61,7 +61,6 @@
             ($ (html/button
                 (sc/on :click (fn [e el]
                                 (dom/ev-stop e)
-                                (log "item cursor" item)
                                 (sc/update! item update-in [:x] inc))))
                "click me")
             " "
@@ -109,6 +108,42 @@
 (defn remove-all [data]
   (sc/update! data assoc :coll []))
 
+(defn switch-tabs [{:keys [selected] :as this} id idx]
+  (sc/update! selected (fn [_] id))
+  (sc/update! this assoc :selected-index idx))
+
+(defc tabs-c
+  :init (fn [{:keys [selected] :as this}]
+          (when (nil? @selected)
+            (sc/update! this assoc :selected-index 0)
+            (sc/update! selected (fn [_] (-> this :tabs first :id)))))
+
+  :dom (fn [{:keys [selected tabs] :as this} _]
+         (let [bar-width (/ 100 (count tabs))]
+           ($ (html/div {:class "sm-tabs"})
+              
+              ($ (html/div
+                  {:class "selection-bar"
+                   :style (str "width: " bar-width "%;")}
+                  (sc/bind (sc/slice this :selected-index)
+                           (fn [el idx]
+                             (dom/set-style el {:left (dom/pct (* idx bar-width))})
+                             ))))
+
+              (for [[idx {:keys [id title]}] (map-indexed vector tabs)]
+                ($ (html/div
+                    {:class "sm-tab"}
+                    (sc/on :click #(switch-tabs this id idx))
+                    (sc/bind selected (fn [el selected]
+                                        (dom/toggle-class el "tab-selected" (= id selected)))))
+                   title))
+
+              ))))
+
+(defn tabs [cursor tabs]
+  (tabs-c {:selected cursor
+           :tabs tabs}))
+
 (defc test-component
   :init (fn [this])
 
@@ -117,6 +152,15 @@
   :dom (fn [{:keys [data] :as this} _]
          (let [object-c (sc/slice data :object)]
            ($ html/div
+              
+              (tabs (sc/slice data :current-tab)
+                    [{:id :item-one
+                      :title "Item One"}
+                     {:id :item-two
+                      :title "Item Two"}
+                     {:id :item-three
+                      :title "Item Three"}])
+              
               ($ html/h1
                  "Hello "
                  (<$ (sc/slice data [:name])
@@ -137,6 +181,8 @@
                     (sc/on :click action))
                    title))
 
+              
+              
               ($ html/ul
                  
                  ($ html/li "before (unmanaged)")
@@ -222,6 +268,9 @@
 (def test-data (atom {:name ""
                       :clicks 0
                       :coll []}))
+
+(add-watch test-data :dump (fn [_ _ _ new]
+                             (log "test-data" new)))
 
 (def root-c (atom nil))
 

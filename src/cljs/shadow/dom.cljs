@@ -301,6 +301,16 @@
   ([el key] (.getAttribute (dom-node el) (name key)))
   ([el key default] (or (.getAttribute (dom-node el) (name key)) default)))
 
+(defn set-style [el styles]
+  (let [dom (dom-node el)]
+
+    ;; apparently IE10+ allows setting properties to null which has unexpected effects
+    ;; on transition and display.
+    (doseq [[k v] styles]
+      (gs/setStyle dom (name k) (if (nil? v)
+                                  ""
+                                  v)))))
+
 (defn set-attr* [el key value]
   ;; basically clone of goog.dom.setProperties, but with keywords
   (case key
@@ -320,6 +330,18 @@
     :usemap (.setAttribute el "useMap" value)
     :valign (.setAttribute el "vAlign" value)
     :width (.setAttribute el "width" value)
+    :style (cond
+            (nil? value)
+            nil
+
+            (string? value)
+            (.setAttribute el "style" value)
+
+            (map? value)
+            (set-style el value)
+
+            :else
+            (gs/setStyle el value))
     ;; FIXME: support :style maps
     (let [ks (name key)]
       (if (or (gstr/startsWith ks "data-")
@@ -395,16 +417,6 @@
 
 (defn set-value [dom value]
   (gf/setValue (dom-node dom) value))
-
-(defn set-style [el styles]
-  (let [dom (dom-node el)]
-
-    ;; apparently IE10+ allows setting properties to null which has unexpected effects
-    ;; on transition and display.
-    (doseq [[k v] styles]
-      (gs/setStyle dom (name k) (if (nil? v)
-                                  ""
-                                  v)))))
 
 (defn px [value]
   (str (int value) "px"))
