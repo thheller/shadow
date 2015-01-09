@@ -108,15 +108,18 @@
 (defn remove-all [data]
   (sc/update! data assoc :coll []))
 
+#_ (def tabs-change ::tabs-change)
+
 (defn switch-tabs [{:keys [selected] :as this} id idx]
   (sc/update! selected (fn [_] id))
-  (sc/update! this assoc :selected-index idx))
+  (sc/update! this assoc :selected-index idx)
+  #_ (sc/send! this tabs-change id idx))
 
-(defc tabs-c
+(defc tabs
   :init (fn [{:keys [selected] :as this}]
           (when (nil? @selected)
             (sc/update! this assoc :selected-index 0)
-            (sc/update! selected (fn [_] (-> this :tabs first :id)))))
+            (sc/update! selected (fn [_] (-> this :tabs first first)))))
 
   :dom (fn [{:keys [selected tabs] :as this} _]
          (let [bar-width (/ 100 (count tabs))]
@@ -130,19 +133,17 @@
                              (dom/set-style el {:left (dom/pct (* idx bar-width))})
                              ))))
 
-              (for [[idx {:keys [id title]}] (map-indexed vector tabs)]
+              (for [[idx [id title]] (map-indexed vector tabs)]
                 ($ (html/div
                     {:class "sm-tab"}
                     (sc/on :click #(switch-tabs this id idx))
                     (sc/bind selected (fn [el selected]
                                         (dom/toggle-class el "tab-selected" (= id selected)))))
                    title))
-
               ))))
 
-(defn tabs [cursor tabs]
-  (tabs-c {:selected cursor
-           :tabs tabs}))
+(defn test-tab-changed [this selected selected-index]
+  (log "tab changed sugar" this selected selected-index))
 
 (defc test-component
   :init (fn [this])
@@ -153,13 +154,12 @@
          (let [object-c (sc/slice data :object)]
            ($ html/div
               
-              (tabs (sc/slice data :current-tab)
-                    [{:id :item-one
-                      :title "Item One"}
-                     {:id :item-two
-                      :title "Item Two"}
-                     {:id :item-three
-                      :title "Item Three"}])
+              (tabs {:selected (sc/slice data :current-tab)
+                     :tabs [[:item-one "Item One"]
+                            [:item-two "Item Two"]
+                            [:item-three "Item Three"]]}
+                    #_ (sc/recv tabs-change test-tab-changed this)
+                    #_ (sc/recv tabs-change (fn [tab idx] (log "tab changed no sugar" tab idx))))
               
               ($ html/h1
                  "Hello "
