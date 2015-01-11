@@ -1,42 +1,39 @@
 (ns build
   (:require [shadow.cljs.build :as cljs]
-            [clojure.java.io :as io]
-            [clojure.java.shell :refer (sh)]))
+            [clojure.java.io :as io]))
 
-
-(defn phantom-tests [state]
-  (println "======= TESTS ==============================================")
-  (let [{:keys [out err] :as results} (sh "phantomjs" "test/runner.js")]
-    (println out)
-    (when (seq err)
-      (println err)))
-  (println "======= /TESTS =============================================")
-  state)
-
-(defn tests
-  "build the project, wait for file changes, run tests, repeat"
+(defn dev
   [& args]
-  (let [state (-> (cljs/init-state)
-                  (cljs/enable-source-maps)
-                  (assoc :optimizations :none
-                         :pretty-print true
-                         :work-dir (io/file "target/cljs-work")
-                         :public-dir (io/file "public/cljs")
-                         :public-path "cljs")
-                  (cljs/step-find-resources-in-jars)
-                  (cljs/step-find-resources "src/cljs")
-                  (cljs/step-find-resources "test/cljs")
-                  (cljs/step-finalize-config)
-                  (cljs/step-compile-core)
-                  (cljs/step-configure-module :tests ['shadow.protocol-test
-                                                      'shadow.test-helper] #{})
-                  )]
-    
-    (loop [state state]
-      (recur (-> state
-                 (cljs/step-compile-modules)
-                 (cljs/flush-unoptimized)
-                 (phantom-tests)
-                 (cljs/wait-and-reload!)
-                 ))))
-  :done)
+  (-> (cljs/init-state)
+      (cljs/enable-source-maps)
+      (assoc :optimizations :none
+             :pretty-print true
+             :work-dir (io/file "target/cljs-work")
+             :cache-dir (io/file "target/cljs-cache")
+             :cache-level :jars
+             :public-dir (io/file "cljs-data/dummy/out")
+             :public-path "out")
+      (cljs/step-find-resources-in-jars)
+      (cljs/step-find-resources "src/cljs")
+      (cljs/step-find-resources "test/cljs")
+
+      (cljs/step-finalize-config)
+      (cljs/step-compile-core)
+
+      (cljs/step-configure-module :cljs ['cljs.core] #{})
+      (cljs/step-configure-module :basic ['basic] #{:cljs})
+      (cljs/step-configure-module :other ['other] #{:cljs})
+
+      (cljs/watch-and-repeat!
+        (fn [state modified]
+          (-> state
+              (cljs/step-compile-modules)
+              (cljs/flush-unoptimized)
+              (cond->
+                ;; first pass, run all tests
+                (empty? modified)
+                (cljs/execute-all-tests!)
+                ;; only execute tests that might have been affected by the modified files
+                (not (empty? modified))
+                (cljs/execute-affected-tests! modified))
+              )))))

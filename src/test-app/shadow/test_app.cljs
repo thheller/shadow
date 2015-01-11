@@ -35,7 +35,7 @@
             (<$ (sc/slice object-c [:i]))
             )))
 
-(defn inc-clicks [data e el]
+(defn inc-clicks [data]
   (sc/update! data update :clicks inc))
 
 (defn clicks-text [clicks]
@@ -58,10 +58,9 @@
 (defc coll-item-view
   :dom (fn [{:keys [item] :as this}]
          ($ html/li
-            ($ (html/button
-                (sc/on :click (fn [e el]
-                                (dom/ev-stop e)
-                                (sc/update! item update-in [:x] inc))))
+            ($ html/button {:on [:click (fn [e el]
+                                          (dom/ev-stop e)
+                                          (sc/update! item update-in [:x] inc))]}
                "click me")
             " "
             ;; [item :name] -- sugar?
@@ -108,42 +107,41 @@
 (defn remove-all [data]
   (sc/update! data assoc :coll []))
 
-#_ (def tabs-change ::tabs-change)
+(def tabs-change ::tabs-change)
 
-(defn switch-tabs [{:keys [selected] :as this} id idx]
-  (sc/update! selected (fn [_] id))
-  (sc/update! this assoc :selected-index idx)
-  #_ (sc/send! this tabs-change id idx))
+(defn switch-tabs [this id idx]
+  (sc/update! this assoc :selected id :selected-index idx)
+  (sc/send! this tabs-change id idx))
 
 (defc tabs
   :init (fn [{:keys [selected] :as this}]
-          (when (nil? @selected)
-            (sc/update! this assoc :selected-index 0)
-            (sc/update! selected (fn [_] (-> this :tabs first first)))))
+          (when (nil? selected)
+            (sc/update! this assoc 
+                        :selected (-> this :tabs first first)
+                        :selected-index 0)))
 
   :dom (fn [{:keys [selected tabs] :as this} _]
          (let [bar-width (/ 100 (count tabs))]
-           ($ (html/div {:class "sm-tabs"})
+           ($ html/div {:class "sm-tabs"}
               
-              ($ (html/div
-                  {:class "selection-bar"
-                   :style (str "width: " bar-width "%;")}
-                  (sc/bind (sc/slice this :selected-index)
-                           (fn [el idx]
-                             (dom/set-style el {:left (dom/pct (* idx bar-width))})
-                             ))))
+              ($ html/div {:class "selection-bar"
+                           :style {:width (dom/pct bar-width)}
+                           :init [(sc/bind (sc/slice this :selected-index)
+                                           (fn [el idx]
+                                             (dom/set-style el {:left (dom/pct (* idx bar-width))})
+                                             ))]})
 
               (for [[idx [id title]] (map-indexed vector tabs)]
-                ($ (html/div
-                    {:class "sm-tab"}
-                    (sc/on :click #(switch-tabs this id idx))
-                    (sc/bind selected (fn [el selected]
-                                        (dom/toggle-class el "tab-selected" (= id selected)))))
+                ($ html/div {:class "sm-tab"
+                             :on [:click #(switch-tabs this id idx)]
+                             :init [(sc/bind (sc/slice this :selected)
+                                             (fn [el selected]
+                                               (dom/toggle-class el "tab-selected" (= id selected))))]}
                    title))
               ))))
 
-(defn test-tab-changed [this selected selected-index]
-  (log "tab changed sugar" this selected selected-index))
+(defn test-tab-changed [this tabs selected selected-index]
+  (log "tab changed sugar" this tabs selected selected-index))
 
 (defc test-component
   :init (fn [this])
@@ -154,12 +152,12 @@
          (let [object-c (sc/slice data :object)]
            ($ html/div
               
-              (tabs {:selected (sc/slice data :current-tab)
-                     :tabs [[:item-one "Item One"]
-                            [:item-two "Item Two"]
-                            [:item-three "Item Three"]]}
-                    #_ (sc/recv tabs-change test-tab-changed this)
-                    #_ (sc/recv tabs-change (fn [tab idx] (log "tab changed no sugar" tab idx))))
+              ($ tabs {:tabs [[:item-one "Item One"]
+                              [:item-two "Item Two"]
+                              [:item-three "Item Three"]]
+                       :init [(sc/recv tabs-change test-tab-changed this)
+                              (sc/recv tabs-change (fn [tabs tab idx]
+                                                     (log "tab changed no sugar" tabs tab idx)))]})
               
               ($ html/h1
                  "Hello "
@@ -177,11 +175,8 @@
                                     ["remove first item" #(remove-first-item data)]
                                     ["remove last item" #(remove-last-item data)]
                                     ["remove all" #(remove-all data)]]]
-                ($ (html/button
-                    (sc/on :click action))
+                ($ html/button {:on [:click action]}
                    title))
-
-              
               
               ($ html/ul
                  
@@ -195,20 +190,18 @@
                  ($ html/li "after (unmanaged)"))
               
 
-              ($ (html/form
-                  (sc/on :submit dom/ev-stop))
+              ($ html/form {:on [:submit dom/ev-stop]}
 
                  ($ div-form-group
                     ($ html/label "What is your name?")
-
-                    (html/input
-                     {:class "form-control" :placeholder "..." :autofocus true}
-                     (sc/on :keyup (fn [e el]
-                                     (sc/update! data assoc :name (dom/get-value el))))))
+                    ($ html/input {:class "form-control"
+                                   :placeholder "..."
+                                   :autofocus true
+                                   :on [:keyup (fn [e el]
+                                                 (sc/update! data assoc :name (dom/get-value el)))]}))
                  ($ div-form-group
-                    ($ (btn-default
-                        (ripple/for-element this)
-                        (sc/on :click (partial inc-clicks data)))
+                    ($ btn-default {:init [(ripple/for-element this)]
+                                    :on [:click #(inc-clicks data)]}
                        "Click me, I do Stuff!"))
 
                  ($ div-form-group
@@ -217,60 +210,92 @@
 
               ($ html/div
 
-                 ($ (btn-default
-                     (sc/on :click (fn [e el]
-                                     (toast/display this {} "Hello World!"))))
+                 ($ btn-default {:on [:click
+                                      (fn [e el]
+                                        (toast/display this {} "Hello World!"))]}
                     "toast") 
 
-                 ($ (btn-default
-                     (sc/on :click #(sc/update! data assoc :object {:id 1
-                                                                    :name "obj1"
-                                                                    :i 0})))
+                 ($ btn-default {:on [:click
+                                      #(sc/update! data assoc :object {:id 1 :name "obj1" :i 0})]}
                     "swap obj 1") 
                  
                  
-                 ($ (btn-default
-                     (sc/on :click #(sc/update! data assoc :object {:id 2
-                                                                    :name "obj2"
-                                                                    :i 0})))
+                 ($ btn-default {:on [:click
+                                      #(sc/update! data assoc :object {:id 2 :name "obj2" :i 0})]}
                     "swap obj 2")
 
-                 ($ (btn-default
-                     (sc/on :click (fn [e el]
-                                     (let [ref (get-in this [:refs :display])]
-                                       (when ref
-                                         (sc/update! data update-in [:object :i] inc))))))
+                 ($ btn-default {:on [:click
+                                      (fn [e el]
+                                        (let [ref (get-in this [:refs :display])]
+                                          (when ref
+                                            (sc/update! data update-in [:object :i] inc))))]}
                     "inc i")
 
-                 ($ (btn-default
-                     (sc/on :click #(sc/update! data dissoc :object)))
+                 ($ btn-default {:on [:click #(sc/update! data dissoc :object)]}
                     "remove obj")
 
-                 ($ (btn-default
-                     (sc/on :click dt/scope-snapshot))
+                 ($ btn-default {:on [:click dt/scope-snapshot]}
                     "scope snapshot"))
               
               (<$ object-c
                   {:key :id
                    :dom (fn [cursor]
                           (when @cursor
-                            ($ (object-display {:object-c cursor}
-                                               (sc/set-ref this [:refs :display])
-                                               (fn [el scope]
-                                                 (go (<! el)
-                                                     (log "object display died")))
-                                               ))
+                            ($ object-display {:object-c cursor
+                                               :init [(sc/set-ref this [:refs :display])
+                                                      (fn [el scope]
+                                                        (go (<! el)
+                                                            (log "object display died")))]})
                             ))})
 
               
               ))))
 
+(comment
+  
+  ;; routing sketch
+  
+  (defn cms-object-sup [data id]
+    (let [object-cursor (sc/slice data :object)
+          view (cms-object-view {:object object-cursor})]
+      
+      ;; FIXME: what it :object has a value from previous, must clear
+      (go (let [obj (<! (cms/load-object id))]
+            (sc/update! object-cursor obj)))
+
+      {:view view
+       :on-enter (fn [])
+       :on-exit (fn [])}))
+
+  (defc cms-view
+    :dom (fn [this]
+           ($ html/div
+              route/mount-point)))
+  
+  (defn cms-sup [data]
+    {:view (cms-view {})
+     :on-enter (fn [view])
+     :on-exit (fn [view])
+     :routes {"/object/{int}" #(cms-object-sup data %1)
+              "/publish" #(cms-publish-sup data)}})
+  
+  (defc root-view
+    :dom (fn [this]
+           ($ html/div {:class "my-super-duper-app"}
+              
+              (route/mount-point this)
+              )))
+
+  (defn root-sup [data]
+    {:view (root-view {})
+     :routes {"/cms" #(cms-sup data)}})
+  
+
+  (def app (sup/init! (root-sup test-data))))
+
 (def test-data (atom {:name ""
                       :clicks 0
                       :coll []}))
-
-(add-watch test-data :dump (fn [_ _ _ new]
-                             (log "test-data" new)))
 
 (def root-c (atom nil))
 
@@ -291,4 +316,4 @@
     (sc/destroy! r)
     (reset! root-c nil)))
 
-(ns-ready)
+(ns-ready) 

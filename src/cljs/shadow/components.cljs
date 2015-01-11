@@ -177,68 +177,43 @@
            (recur more)
            ))))))
 
+(defn add-event-listeners [el events owner]
+  (assert (even? (count events)))
+  (doseq [[ev-name ev-handler] (partition 2 events)]
+    (assert (keyword? ev-name) "Event must be a Keyword")
+    (assert (fn? ev-handler) "Event Handler must be a function")
+    (dom/on el ev-name
+            (fn [e ev-el]
+              (ev-handler e el owner)))))
 
-;; FIXME: do this correctly or not at all.
-#_ (def childless #{"IMG" "INPUT"})
 
-(defn dom-element [tag scope attrs init-fns children]
-  #_ (when (and (contains? childless tag)
-                (seq children))
-       (throw (ex-info (str tag " cannot have children, yet we got some") {:tag tag
-                                                                           :attrs attrs
-                                                                           :children children})))
-  
+(defn dom-element [tag scope attrs children]
   (let [el (js/document.createElement tag)]
-    (dom/set-attrs el attrs)
 
-    (doseq [init-fn init-fns]
-      (init-fn el scope))
+    ;; apply attributes, :init is special, might add more later
+    (doseq [[key value] attrs]
+      (case key
+        :init (doseq [init-fn value]
+                (init-fn el scope))
+        :on (add-event-listeners el value scope)
+
+        ;; default to dom attr
+        (dom/set-attr* el key value) 
+        )) 
 
     (expand-children! el scope children)
     el
     ))
 
-(deftype ElementFactory [el-ctor el-attr el-init]
+(defn merge-attr [a b]
+  (merge a b))
+
+(deftype ElementFactory [el-ctor el-attr]
   IFn
   (-invoke [this]
     this)
   (-invoke [_ attr]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) el-init)
-      (ElementFactory. el-ctor el-attr (conj el-init attr))))
-  (-invoke [_ attr i1]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1))))
-  (-invoke [_ attr i1 i2]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2))))
-  (-invoke [_ attr i1 i2 i3]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3))))
-  (-invoke [_ attr i1 i2 i3 i4]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4))))
-  (-invoke [_ attr i1 i2 i3 i4 i5]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5))))
-  (-invoke [_ attr i1 i2 i3 i4 i5 i6]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5 i6))))
-  (-invoke [_ attr i1 i2 i3 i4 i5 i6 i7]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6 i7))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5 i6 i7))))
-  (-invoke [_ attr i1 i2 i3 i4 i5 i6 i7 i8]
-    (if (map? attr)
-      (ElementFactory. el-ctor (merge el-attr attr) (conj el-init i1 i2 i3 i4 i5 i6 i7 i8))
-      (ElementFactory. el-ctor el-attr (conj el-init attr i1 i2 i3 i4 i5 i6 i7 i8))))
-  ;; FIXME: add more -invoke ...
+    (ElementFactory. el-ctor (merge-attr el-attr attr)))
   
   IDeref
   (-deref [_] el-ctor)
@@ -249,7 +224,7 @@
 
   IElementFactory
   (-create-element [_ scope children]
-    (el-ctor scope el-attr el-init children)))
+    (el-ctor scope el-attr children)))
 
 (defn- process-all! [items]
   (doseq [item items]
@@ -390,10 +365,7 @@
 (defn bind-attr [attr cursor callback]
   (bind cursor (fn [el new-value] (dom/set-attr el attr (callback new-value)))))
 
-(defn on [event callback]
-  (fn [el scope owner]
-    (dom/on el event (fn [e ev-el]
-                       (callback e el scope owner)))))
+
 
 (deftype DynamicElement [cursor opts]
   IDynamicElement
@@ -666,7 +638,6 @@
                        (cond->
                         id (assoc :id id)
                         class (assoc :class class)))
-                   []
                    children))))
 
 (extend-protocol IDynamicElement
@@ -676,6 +647,27 @@
   cljs.core/PersistentHashMap
   (-insert-element! [this scope el]
     (dom/set-attrs el this)))
+
+(defprotocol IEventProducer
+  (-trigger-event! [this ev args])
+  (-add-receiver! [this ev callback]))
+
+(defn send! [cmp ev & args]
+  (-trigger-event! cmp ev args))
+
+(defn recv
+  ([ev callback]
+     (fn [el _]
+       (-add-receiver! el ev callback)))
+  ([ev callback & args]
+     (fn [el _]
+       (-add-receiver! el ev (fn [& ev-args]
+                               (apply callback (concat args ev-args)))))))
+
+(defn conjv [v x]
+  (if (nil? v)
+    [x]
+    (conj v x)))
 
 (deftype Instance
     [id
@@ -687,10 +679,19 @@
      state ;; local state
      ^:mutable dom
      ^:mutable alive?
-     ^:mutable ref-count]
+     ^:mutable ref-count
+     ^:mutable ev-receivers]
   IScoped
   (-get-scope [_]
     scope)
+  
+  IEventProducer
+  (-trigger-event! [this ev args]
+    (doseq [callback (get ev-receivers ev)]
+      (apply callback this args)
+      ))
+  (-add-receiver! [this ev callback]
+    (set! ev-receivers (update-in ev-receivers [ev] conjv callback)))
 
   IDestruct
   (destroy! [this]
@@ -779,7 +780,7 @@
       (str "$$" prefix "$" (swap! id inc)))))
 
 (defn create-instance
-  [spec parent-scope attr init-fns children]
+  [spec parent-scope attr children]
   (let [scope (new-scope (:name spec) parent-scope)
         id (next-component-id (:name spec))
         
@@ -788,11 +789,11 @@
         ;; all should get the return val, not just one lucky one
         chan (async/chan 1)
         
-        cmp (Instance. id (:name spec) spec scope chan nil (atom attr) nil true 0)]
+        init-state (dissoc attr :init :on)
+        cmp (Instance. id (:name spec) spec scope chan nil (atom init-state) nil true 0 {})]
     
     ;; FIXME: if any of this fails we leak an Instance
     ;;        which is semi constructed but may already have watches & stuff
-    ;;        wrapping in try/catch prevents JIT from optimizing?
 
     (set! (.-owner scope) cmp)
     (call cmp :init)
@@ -817,12 +818,16 @@
       
       (when-not dom
         (throw (ex-info "component did not construct a dom node" {:spec spec :attr attr})))
+      
+      (let [on (:on attr)]
+        (when (seq on)
+          (add-event-listeners dom on cmp)))
 
       (dom/set-data dom :cid id)
       (set! (.-dom cmp) dom)
       (aset dom "$$owner" cmp)
 
-      (doseq [init-fn init-fns]
+      (doseq [init-fn (:init attr)]
         (init-fn cmp scope))
       
       (call cmp :dom/init (dom/dom-node dom))
@@ -852,38 +857,61 @@
      (NodeBuilder. el #js []))
   ([el c1]
      (check-el el)
-     (NodeBuilder. el #js [c1]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [])
+       (NodeBuilder. el #js [c1])))
   ([el c1 c2]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2])
+       (NodeBuilder. el #js [c1 c2])))
   ([el c1 c2 c3]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3])
+       (NodeBuilder. el #js [c1 c2 c3])))
   ([el c1 c2 c3 c4]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4])
+       (NodeBuilder. el #js [c1 c2 c3 c4])))
   ([el c1 c2 c3 c4 c5]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5])))
   ([el c1 c2 c3 c4 c5 c6]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6])))
   ([el c1 c2 c3 c4 c5 c6 c7]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6 c7])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7])))
   ([el c1 c2 c3 c4 c5 c6 c7 c8]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6 c7 c8])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8])))
   ([el c1 c2 c3 c4 c5 c6 c7 c8 c9]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6 c7 c8 c9])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9])))
   ([el c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6 c7 c8 c9 c10])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10])))
   ([el c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]))
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6 c7 c8 c9 c10 c11])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11])))
   ([el c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]
      (check-el el)
-     (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]))
-  )
+     (if (map? c1)
+       (NodeBuilder. (el c1) #js [c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12])
+       (NodeBuilder. el #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]))))

@@ -20,11 +20,13 @@
   :cljs {:modules [{:name :test
                     :main 'shadow.test-app}]
          
+         :test {:test-paths ["src/test"]
+                :auto-run :affected} 
+         
          :live-reload {:before-load 'shadow.test-app/stop}
 
          :source-paths ["src/js"
                         "src/cljs"
                         "src/test-app"]
          :public-dir "target/cljs-out"
-         :public-path "target/cljs-out"}
-  )
+         :public-path "target/cljs-out"}) 

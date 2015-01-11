@@ -13,10 +13,11 @@
 
 (defc component
   :dom (fn [{:keys [attrs] :as this} children]
-         ($ (html/div
-             (merge default-attrs attrs)
-             (sc/on :click (fn [_ _]
-                             (sc/destroy! this))))
+         ($ html/div (merge default-attrs
+                            {:on [:click (fn [_ _]
+                                           (sc/destroy! this))]}
+                            attrs)
+            
             children)))
 
 ;; FIXME: currently toasts can overlap each other, should instead queue after each other
@@ -26,9 +27,9 @@
   [parent
    {:keys [timeout]
     :or {timeout 3000}
-    :as attr}
+    :as attrs}
    & body]
-  (let [toast (sc/construct parent ($ (component attr) body))
+  (let [toast (sc/construct parent ($ component {:attrs attrs} body))
         slide-in (anim/setup 80 {toast (anim/combine
                                         (anim/translate-y "100%" "0" "ease-in-out")
                                         (anim/fade-in "ease-in-out"))})]
