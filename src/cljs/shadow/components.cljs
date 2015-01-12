@@ -205,7 +205,7 @@
     el
     ))
 
-(defn merge-attr [a b]
+(defn merge-attrs [a b]
   (merge a b))
 
 (deftype ElementFactory [el-ctor el-attr]
@@ -213,7 +213,8 @@
   (-invoke [this]
     this)
   (-invoke [_ attr]
-    (ElementFactory. el-ctor (merge-attr el-attr attr)))
+    (assert (map? attr) "Excepted a map with attributes")
+    (ElementFactory. el-ctor (merge-attrs el-attr attr)))
   
   IDeref
   (-deref [_] el-ctor)

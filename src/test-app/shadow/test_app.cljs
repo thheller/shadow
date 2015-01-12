@@ -143,12 +143,64 @@
 (defn test-tab-changed [this tabs selected selected-index]
   (log "tab changed sugar" this tabs selected selected-index))
 
+(defprotocol Form
+  (-get-field [this path]))
+
+(defprotocol FormField
+  (-set-value [this new-value])
+  (-get-value [this]))
+
+(defprotocol FieldWithOptions
+  (-set-options [this new-options])
+  (-get-options [this]))
+
+(deftype FormInstance [data]
+  Form
+  (-get-field [this path]
+    ))
+
+(defn form [init-data]
+  (let [data (sc/root-cursor (atom init-data))]
+    (FormInstance. data)
+    ))
+
+(defn form-field [form path]
+  (sc/slice (.-data form) path))
+
+(defn init-input [field]
+  (fn [input scope]
+    (dom/on input :change (fn [e el]
+                            (sc/update! field (fn [_] (.. e -target -value)))
+                            (log "new input value" (.. e -target -value) field input scope)))
+    
+    ;; set initial value
+    (dom/set-value input @field)
+    ))
+
+(defn form-get-error [field]
+  (when (not= @field "Thomas")
+    "I haz errors."))
+
+(defn form-error-display [field display-fn]
+  (<$ field
+      {:dom (fn [_]
+              (when-let [msg (form-get-error field)]
+                (display-fn msg)))}))
+
+(def form-spec
+  [{:path [:name] :get-error (fn [new-value rest-of-form]
+                               (when (not= "Thomas" new-value)
+                                 "Not Thomas?"))}])
+
 (defc test-component
-  :init (fn [this])
+  :init (fn [{:keys [data] :as this}]
+          (let [form (form @data)]
+            (sc/update! this assoc :form form)
+            ))
 
   :dom/init (fn [this el])
   
-  :dom (fn [{:keys [data] :as this} _]
+  :dom (fn [{:keys [form data] :as this} _]
          (let [object-c (sc/slice data :object)]
            ($ html/div
               
@@ -167,6 +219,30 @@
                          @cursor
                          "Stranger")))
                  "!")
+              
+              ($ html/form {:on [:submit dom/ev-stop]}
+
+                 (let [field (form-field form :name)]
+                   ($ div-form-group
+                      ($ html/label "What is your name?")
+
+                      (form-error-display
+                       field
+                       (fn [message]
+                         ($ html/div {:class "form-error"} message)))
+
+                      ($ html/input {:class "form-control"
+                                     :placeholder "..."
+                                     :autofocus true
+                                     :init [(init-input field)]})))
+
+                 ($ div-form-group
+                    ($ btn-default {:init [(ripple/for-element this)]
+                                    :on [:click #(inc-clicks data)]}
+                       "Click me, I do Stuff!"))
+
+                 ($ div-form-group
+                    (<$ (sc/slice data [:clicks]) clicks-text)))
               
               (for [[title action] [["add item" #(add-item data)]
                                     ["add 200 items" #(dotimes [i 200] (add-item data))]
@@ -190,22 +266,7 @@
                  ($ html/li "after (unmanaged)"))
               
 
-              ($ html/form {:on [:submit dom/ev-stop]}
-
-                 ($ div-form-group
-                    ($ html/label "What is your name?")
-                    ($ html/input {:class "form-control"
-                                   :placeholder "..."
-                                   :autofocus true
-                                   :on [:keyup (fn [e el]
-                                                 (sc/update! data assoc :name (dom/get-value el)))]}))
-                 ($ div-form-group
-                    ($ btn-default {:init [(ripple/for-element this)]
-                                    :on [:click #(inc-clicks data)]}
-                       "Click me, I do Stuff!"))
-
-                 ($ div-form-group
-                    (<$ (sc/slice data [:clicks]) clicks-text)))
+              
               
 
               ($ html/div
@@ -293,7 +354,7 @@
 
   (def app (sup/init! (root-sup test-data))))
 
-(def test-data (atom {:name ""
+(def test-data (atom {:name "Thomas"
                       :clicks 0
                       :coll []}))
 
