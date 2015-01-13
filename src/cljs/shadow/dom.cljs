@@ -149,15 +149,18 @@
     (dom/createDom tag-name props)
     ))
 
+;; FIXME: throw on nil? trying to append nil should be an error, not ignored
 (defn append
   ([node]
-     (let [n (dom-node node)]
-       (.appendChild (.-body js/document) n)
-       n))
+     (when node
+       (when-let [n (dom-node node)]
+         (.appendChild (.-body js/document) n)
+         n)))
   ([el node]
-     (let [n (dom-node node)]
-       (.appendChild (dom-node el) n)
-       n)))
+     (when node
+       (when-let [n (dom-node node)]
+         (.appendChild (dom-node el) n)
+         n))))
 
 (defn destructure-node
   [create-fn [nn np & nc :as node]]
