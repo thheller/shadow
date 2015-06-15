@@ -187,3 +187,14 @@
        (-animate-timings [_] {vendor-transform timing})
        (-animate-toggles [_] {})
        (-animate-delays [_] {vendor-transform delay}))))
+
+(defn translate-x
+  ([from to timing]
+     (translate-x from to timing 0))
+  ([from to timing delay]
+     (reify Animation
+       (-animate-from [_] {:transform (str "translateX(" from ")")})
+       (-animate-to [_] {:transform (str "translateX(" to ")")})
+       (-animate-timings [_] {vendor-transform timing})
+       (-animate-toggles [_] {})
+       (-animate-delays [_] {vendor-transform delay}))))
