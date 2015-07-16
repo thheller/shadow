@@ -77,8 +77,8 @@
     (Animator. duration items)))
 
 (defn continue! [animator]
-  (go (start! animator)
-      (<! (async/timeout (get-duration animator)))
+  (start! animator)
+  (go (<! (async/timeout (get-duration animator)))
       (finish! animator)
       :done))
 
@@ -116,13 +116,15 @@
 
 (defn set-attr
   "set attr to value when the animation starts"
-  [attr value]
-  (reify Animation
-    (-animate-to [_] {})
-    (-animate-from [_] {attr value})
-    (-animate-toggles [_] {})
-    (-animate-timings [_] {})
-    (-animate-delays [_] {})))
+  ([attrs]
+     (reify Animation
+       (-animate-to [_] {})
+       (-animate-from [_] attrs)
+       (-animate-toggles [_] {})
+       (-animate-timings [_] {})
+       (-animate-delays [_] {})))
+  ([attr value]
+     (set-attr {attr value})))
 
 (defn delete-attr
   "use to remove a given attribute style when the animation is finished

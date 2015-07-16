@@ -1,5 +1,6 @@
 (ns shadow.util
-  (:require-macros [shadow.util :as m]))
+  (:require-macros [shadow.util :as m])
+  (:require [cljs.core.async :as async])) ;; not really used here, but the go! macro needs this
 
 (defn console-friendly [a]
   (cond

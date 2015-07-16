@@ -427,12 +427,17 @@
 (defn pct [value]
   (str value "%"))
 
-(defn remove-style [el style]
+(defn remove-style* [el style]
   (.removeProperty (.-style el) (name style)))
 
+(defn remove-style [el style]
+  (let [el (dom-node el)]
+    (remove-style* el style)))
+
 (defn remove-styles [el style-keys]
-  (doseq [it style-keys]
-    (remove-style el it)))
+  (let [el (dom-node el)]
+    (doseq [it style-keys]
+      (remove-style* el it))))
 
 (defn get-position [el]
   (let [pos (gs/getClientPosition (dom-node el))]
