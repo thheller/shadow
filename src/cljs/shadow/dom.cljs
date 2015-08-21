@@ -50,7 +50,7 @@
   ;; protocols on native elements are funky
   (cond
    (nil? el) nil
-   (satisfies? IElement el) (-to-dom ^not-native el)
+   (implements? IElement el) (-to-dom ^not-native el)
    (string? el) (.createTextNode js/document el)
    (number? el) (.createTextNode js/document (str el))
    :else el))
@@ -270,7 +270,7 @@
   (dom/removeChildren (dom-node node)))
 
 (defn remove [node]
-  (if (satisfies? ISeqable node)
+  (if (implements? ISeqable node)
     (doseq [n node] (remove n))
     (dom/removeNode node)))
 
@@ -553,7 +553,7 @@
 (defn svg-node [el]
   (cond
    (nil? el) nil
-   (satisfies? SVGElement el) (-to-svg ^not-native el)
+   (implements? SVGElement el) (-to-svg ^not-native el)
    :else el))
 
 (defn make-svg-node [structure]
