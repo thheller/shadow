@@ -304,7 +304,7 @@
   (when-not (even? (count args))
     (throw (str "invalid object definition " (str id) " args: "(pr-str args))))
   (when (contains? @object-defs id)
-    (throw (str "object already defined " id)))
+    (js/console.warn (str "object already defined " id)))
 
   (try
     (let [odef (apply hash-map args)
