@@ -24,10 +24,3 @@
           (fn [dummy#]
             (let [~@(mapcat (juxt :name :get-value) let-bindings)]
               ~@body)))))))
-
-
-(defmacro define-node-factories [syms]
-  `(do ~@(for [sym syms]
-           `(def ~sym (shadow.components/ElementFactory.
-                       #(shadow.components/dom-element ~(str/upper-case (name sym)) %1 %2 %3)
-                       {})))))
