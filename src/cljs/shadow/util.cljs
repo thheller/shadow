@@ -12,6 +12,9 @@
    :else a
    ))
 
+(defn go! [& body]
+  (throw (ex-info "go! is a macro" {})))
+
 (def console? (not (nil? (aget js/window "console"))))
 
 (defn log

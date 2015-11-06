@@ -11,6 +11,8 @@ pom.xml.asc
 .DS_Store
 *.jar
 *.class
+*.iml
+.idea
 .lein-deps-sum
 .lein-failures
 .lein-plugins

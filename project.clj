@@ -5,11 +5,11 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
+                 [org.clojure/core.async "0.2.371"]]
   
   :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.clojure/clojure "1.7.0"]
-                                  [thheller/shadow-devtools "0.1.0"]]}}
+                                  [thheller/shadow-devtools "0.1.31"]]}}
 
   :source-paths ["src/clj"
                  "src/cljs"]

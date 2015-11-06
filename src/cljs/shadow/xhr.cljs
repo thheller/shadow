@@ -126,7 +126,7 @@
   (= 200 status))
 
 (defn request-error? [status]
-  (>= status 500))
+  (>= status 400))
 
 (defn chan
   "creates a channel and performs xhr request like (chan :GET \"/something\")

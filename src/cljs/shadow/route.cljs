@@ -1,5 +1,5 @@
 (ns shadow.route
-  (:import goog.History)
+  (:import goog.history.Html5History)
   (:require [clojure.data :as data]
             [goog.events :as gev]
             [shadow.dom :as dom]
@@ -10,7 +10,7 @@
 
 ;; FIXME: rewrite this, its clearly broken in some places
 
-(def history (History.))
+(def history (Html5History.))
 (def current-state (atom nil))
 
 (def current-path (atom (-> js/document
