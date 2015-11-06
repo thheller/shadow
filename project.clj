@@ -9,7 +9,7 @@
   
   :profiles {:dev {:source-paths ["dev"]
                    :dependencies [[org.clojure/clojure "1.7.0"]
-                                  [thheller/shadow-devtools "0.1.31"]]}}
+                                  [thheller/shadow-devtools "0.1.34"]]}}
 
   :source-paths ["src/clj"
                  "src/cljs"]
