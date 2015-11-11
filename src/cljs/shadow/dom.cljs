@@ -608,13 +608,14 @@
    - false: never removed
    - chan: remove on msg/close"
   ([el event]
-     (event-chan el event (fn [e el] [e el]) false))
-  ([el event transform-fn]
-     (event-chan el event transform-fn false))
-  ([el event transform-fn once-or-cleanup]
-     (let [chan (async/chan (async/sliding-buffer 1))
+     (event-chan el event nil false))
+  ([el event xf]
+     (event-chan el event xf false))
+  ([el event xf once-or-cleanup]
+     (let [buf (async/sliding-buffer 1)
+           chan (async/chan buf xf)
            event-fn (fn event-fn [e]
-                      (async/put! chan (transform-fn e el))
+                      (async/put! chan e)
                       (when (true? once-or-cleanup)
                         (remove-event-handler el event event-fn)
                         (async/close! chan)
