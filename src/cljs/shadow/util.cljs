@@ -15,7 +15,7 @@
 (defn go! [& body]
   (throw (ex-info "go! is a macro" {})))
 
-(def console? (not (nil? (aget js/window "console"))))
+(def console? (exists? js/console))
 
 (defn log
   ([a1]
@@ -70,17 +70,18 @@
              (pr-str more)))))
 
 ;; HAX
-(def default-ex-info js/cljs.core.ex-info)
+(comment
+  (def default-ex-info js/cljs.core.ex-info)
 
-(set! (.. js/cljs -core -ex-info)
-      (fn shadow-ex-info
-        ([msg map]
-           (m/log "EX-INFO:" msg map)
-           (default-ex-info msg map))
-        ([msg map cause]
-           (m/log "EX-INFO:" msg map cause)
-           (default-ex-info msg map cause))
-        ))
+  (set! (.. js/cljs -core -ex-info)
+    (fn shadow-ex-info
+      ([msg map]
+       (m/log "EX-INFO:" msg map)
+       (default-ex-info msg map))
+      ([msg map cause]
+       (m/log "EX-INFO:" msg map cause)
+       (default-ex-info msg map cause))
+      )))
 
 
 (defn remove-from-vector [coll key]

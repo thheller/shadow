@@ -119,3 +119,6 @@
     
     (pos-fn)
     ))
+
+(defn at-coordinate [el el-pos]
+  (pos/positionAtCoordinate (->coordinate el-pos) el))

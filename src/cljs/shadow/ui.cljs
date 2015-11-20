@@ -135,10 +135,10 @@
             (sort-by first)
             (map (fn [[group items]]
                    [group (vec (map (fn [item]
-                                         [(get item value-key)
-                                          (label-fn item)])
-                                       items))])
-                 ))))
+                                      [(get item value-key)
+                                       (label-fn item)])
+                                 items))])
+              ))))
 
 (defn never-has-errors [obj field value]
   nil)
@@ -163,7 +163,7 @@
       (do
         (so/notify! parent :input/validated a value input)
         true))
-      ))
+    ))
 
 (defn quick-validation [{:keys [input-type] :as this}]
   (let [sval (dom/get-value this)
@@ -260,7 +260,7 @@
                                                val (-decode input-type sval)]]
                                    (set! (.-selected node) (contains? selected-set val))))
                                )))
-       
+
        :input/set-options (fn [{:keys [a input-type parent v] :as this} new-options]
                             (when-let [nv (get-in new-options a)]
                               (dom/reset this)
@@ -282,42 +282,42 @@
 
 (defn dom-select
   ([obj attr type options]
-     (dom-select obj attr type options {}))
+   (dom-select obj attr type options {}))
   ([obj attr type options select-attrs]
-     (when-not (satisfies? IInputType type)
-       (throw (ex-info "dom select type must support protocol InputType" {:type type})))
+   (when-not (satisfies? IInputType type)
+     (throw (ex-info "dom select type must support protocol InputType" {:type type})))
 
-     (when-not (vector? options)
-         (throw (ex-info "select options should be a vector" {:parent obj :attr attr :options options})))
+   (when-not (vector? options)
+     (throw (ex-info "select options should be a vector" {:parent obj :attr attr :options options})))
 
-     ;; options should be [[value "label"] [value "label"]
+    ;; options should be [[value "label"] [value "label"]
 
-     (let [a (as-path attr)
-           v (get-in obj a)]
+   (let [a (as-path attr)
+         v (get-in obj a)]
 
-       (so/create (if (:multiple select-attrs)
-                    ::dom-select-multiple
-                    ::dom-select)
-                  {:parent obj
-                   :attrs (dissoc select-attrs :group)
-                   :options options
-                   :group (:group select-attrs)
-                   :a a
-                   :v v
-                   :input-type type}))))
+     (so/create (if (:multiple select-attrs)
+                  ::dom-select-multiple
+                  ::dom-select)
+       {:parent obj
+        :attrs (dissoc select-attrs :group)
+        :options options
+        :group (:group select-attrs)
+        :a a
+        :v v
+        :input-type type}))))
 
 
 (defn dom-select-grouped
   ([obj attr type options]
-     (dom-select obj attr type options {:group true}))
+   (dom-select obj attr type options {:group true}))
   ([obj attr type options select-attrs]
-     (dom-select obj attr type options (assoc select-attrs :group true))))
+   (dom-select obj attr type options (assoc select-attrs :group true))))
 
 (defn dom-select-multiple
   ([obj attr type options]
-     (dom-select obj attr type options {:multiple true}))
+   (dom-select obj attr type options {:multiple true}))
   ([obj attr type options select-attrs]
-     (dom-select obj attr type options (assoc select-attrs :multiple true))))
+   (dom-select obj attr type options (assoc select-attrs :multiple true))))
 
 (defn process-dom-input [{:keys [parent a input-type] :as this} ev-type]
   (let [sval (dom/get-value this)
@@ -343,41 +343,41 @@
                       (when-not (= "off" (dom/attr this :autocomplete)) ;; fucking autocomplete, we need a standard for this stuff
                         (when (= v "")
                           (.setTimeout
-                           js/window
-                           (fn []
-                             (let [sv (dom/get-value this)]
-                               (when (not= sv "")
-                                 (let [new-value (-decode input-type sv)]
-                                   (when (do-validation this new-value)
-                                     (so/log "found autocomplete field" parent a)
-                                     (so/notify! parent :input/change a new-value this)
-                                     )))))
-                           250
-                           ))))
+                            js/window
+                            (fn []
+                              (let [sv (dom/get-value this)]
+                                (when (not= sv "")
+                                  (let [new-value (-decode input-type sv)]
+                                    (when (do-validation this new-value)
+                                      (so/log "found autocomplete field" parent a)
+                                      (so/notify! parent :input/change a new-value this)
+                                      )))))
+                            250
+                            ))))
 
        :dom/init (fn [{:keys [a parent input-type capture] :as this}]
                    (when (contains? capture :key-up)
                      (dom/on this :keyup
-                             (fn [e]
-                               (so/notify! parent :input/key-up a this e))))
+                       (fn [e]
+                         (so/notify! parent :input/key-up a this e))))
 
                    (when (contains? capture :enter)
                      (dom/on this :keyup
-                             (fn [e]
-                               (when (= 13 (.-keyCode e))
-                                 (let [sval (dom/get-value this)
-                                       new-value (-decode input-type sval)]
+                       (fn [e]
+                         (when (= 13 (.-keyCode e))
+                           (let [sval (dom/get-value this)
+                                 new-value (-decode input-type sval)]
 
-                                   ;; FIXME: need to figure out what the best behavior is here, mostly related to validations
-                                   ;; not using change event since I basically want validation on blur
-                                   ;; doing it again on change is kinda pointless since we can do it here
-                                   (when (do-validation this new-value)
-                                     (so/notify! parent :input/enter a new-value this)
-                                     )))))))]
+                             ;; FIXME: need to figure out what the best behavior is here, mostly related to validations
+                             ;; not using change event since I basically want validation on blur
+                             ;; doing it again on change is kinda pointless since we can do it here
+                             (when (do-validation this new-value)
+                               (so/notify! parent :input/enter a new-value this)
+                               )))))))]
 
   :dom/events [:focus (fn [{:keys [a parent] :as this} ev]
                         (so/notify! parent :input/focus a this))
-               
+
                :change (fn [{:keys [parent a input-type v] :as this} ev]
                          (let [sval (dom/get-value this)
                                new-value (-decode input-type sval)]
@@ -409,7 +409,7 @@
 
         input-attrs (dissoc attrs :capture :default)
         input-attrs (merge {:name (dom-name attr)} ;; automated naming may lead to conflicts
-                           input-attrs)]
+                      input-attrs)]
 
     (so/create ::dom-input {:parent obj
                             :attrs input-attrs
@@ -424,7 +424,7 @@
          [:input attrs])
 
   :on [:input/force-validation (fn [this]
-                                 (do-validation this (:v this))) 
+                                 (do-validation this (:v this)))
 
        :input/set-values (fn [{:keys [a negated] :as this} new-values]
                            (let [nv (get-in new-values a)]
@@ -439,31 +439,31 @@
                                nv (if negated (not nv) nv)]
                            (so/update! this assoc :v nv)
                            (when (do-validation this nv)
-                             (so/notify! parent :input/change a nv this)) 
+                             (so/notify! parent :input/change a nv this))
                            ))])
 
 (defn dom-checkbox
   ([obj attr]
-     (dom-checkbox obj attr {}))
+   (dom-checkbox obj attr {}))
   ([obj attr attrs]
-     (let [a (as-path attr)
-           v (get-in obj a false)
-           negated (:negated attrs false)
-           v (if negated
-               (not v)
-               v)
-           attrs (dissoc attrs :negated)
-           attrs (assoc attrs :type "checkbox")
-           attrs (if v
-                   (assoc attrs :checked true)
-                   attrs)]
+   (let [a (as-path attr)
+         v (get-in obj a false)
+         negated (:negated attrs false)
+         v (if negated
+             (not v)
+             v)
+         attrs (dissoc attrs :negated)
+         attrs (assoc attrs :type "checkbox")
+         attrs (if v
+                 (assoc attrs :checked true)
+                 attrs)]
 
-       (so/create ::dom-checkbox {:parent obj
-                                  :negated negated
-                                  :a a
-                                  :v v
-                                  :attrs attrs})
-       )))
+     (so/create ::dom-checkbox {:parent obj
+                                :negated negated
+                                :a a
+                                :v v
+                                :attrs attrs})
+     )))
 
 (so/define ::dom-radio
   ;; [:input {:type "radio" :checked true}] doesnt work for some reason
@@ -476,11 +476,11 @@
 
   :on [:dom/init (fn [{:keys [attrs] :as this}]
                    (when (:checked attrs)
-                     (with-timeout 1 #(dom/check this true)) 
+                     (with-timeout 1 #(dom/check this true))
                      ))
 
        :input/force-validation (fn [this]
-                                 (do-validation this (:v this))) 
+                                 (do-validation this (:v this)))
 
        :input/set-values (fn [{:keys [a v negated] :as this} new-values]
                            (let [nv (get-in new-values a)]
@@ -490,28 +490,28 @@
   :dom/events [:change (fn [{:keys [a v parent] :as this} e]
                          (when (dom/checked? this)
                            (when (do-validation this v)
-                             (so/notify! parent :input/change a v this))) 
+                             (so/notify! parent :input/change a v this)))
                          )])
 
 (defn dom-radio
   ([obj attr input-type v]
-     (dom-radio obj attr input-type v {}))
+   (dom-radio obj attr input-type v {}))
   ([obj attr input-type v attrs]
-     (let [a (as-path attr)
-           cv (get-in obj a false)
-           attrs (assoc attrs
-                   :type "radio"
-                   :name (dom-name a))
-           attrs (if (= cv v)
-                   (assoc attrs :checked true)
-                   attrs)]
-       
-       (so/log "dom-radio" a v cv attrs)
+   (let [a (as-path attr)
+         cv (get-in obj a false)
+         attrs (assoc attrs
+                 :type "radio"
+                 :name (dom-name a))
+         attrs (if (= cv v)
+                 (assoc attrs :checked true)
+                 attrs)]
 
-       (so/create ::dom-radio {:parent obj
-                               :a a
-                               :v v
-                               :attrs attrs}))))
+     (so/log "dom-radio" a v cv attrs)
+
+     (so/create ::dom-radio {:parent obj
+                             :a a
+                             :v v
+                             :attrs attrs}))))
 
 (so/define ::dom-textarea
   :dom (fn [{:keys [attrs v] :as this}]
@@ -548,17 +548,19 @@
 (defn keyed-timeout
   ([key callback] (keyed-timeout key callback 3000))
   ([key callback time-ms]
-     (let [cur (get @timeouts key)]
-       (when cur
-         (.clearTimeout js/window cur))
-       (let [timeout-fn (fn []
-                          (swap! timeouts dissoc key)
-                          (callback))
-             timeout-id (.setTimeout js/window timeout-fn time-ms)]
-         (swap! timeouts assoc key timeout-id)
-         ))))
+   (let [cur (get @timeouts key)]
+     (when cur
+       (.clearTimeout js/window cur))
+     (let [timeout-fn (fn []
+                        (swap! timeouts dissoc key)
+                        (callback))
+           timeout-id (.setTimeout js/window timeout-fn time-ms)]
+       (swap! timeouts assoc key timeout-id)
+       ))))
 
-(def local-storage (.-localStorage js/window))
+(def local-storage
+  (when (exists? js/window)
+    (.-localStorage js/window)))
 
 ;; (def my-atom (ui/store-locally (atom defaults) "key"))
 ;; (def my-atom (atom defaults)
@@ -571,11 +573,11 @@
       (reset! atm (reader/read-string stored-value)))
 
     (add-watch atm :store-locally
-               (fn [_ _ _ new]
-                 (try
-                   (aset local-storage name (pr-str new))
-                   (catch :default e
-                     (so/log "localStorage failed" e)))))
+      (fn [_ _ _ new]
+        (try
+          (aset local-storage name (pr-str new))
+          (catch :default e
+            (so/log "localStorage failed" e)))))
 
     atm
     ))
@@ -590,13 +592,13 @@
   [ex coll]
   (let [step (fn step [xs seen]
                (lazy-seq
-                ((fn [[f :as xs] seen]
-                   (let [fex (ex f)]
-                     (when-let [s (seq xs)]
-                       (if (contains? seen fex)
-                         (recur (rest s) seen)
-                         (cons f (step (rest s) (conj seen fex)))))))
-                 xs seen)))]
+                 ((fn [[f :as xs] seen]
+                    (let [fex (ex f)]
+                      (when-let [s (seq xs)]
+                        (if (contains? seen fex)
+                          (recur (rest s) seen)
+                          (cons f (step (rest s) (conj seen fex)))))))
+                   xs seen)))]
     (step coll #{})))
 
 (defn self-destruct
@@ -611,13 +613,13 @@
   
   this will so/destroy! (the default) the object 3000ms after it entered the dom"
   ([timeout]
-     (self-destruct timeout so/destroy!))
+   (self-destruct timeout so/destroy!))
   ([timeout destruct-fn]
-     [:dom/entered
-      (fn [this]
-        (let [timer (with-timeout timeout
-                      #(destruct-fn this))]
-          (dom/on this :click
-                  (fn [e]
-                    (.clearTimeout js/window timer)
-                    (destruct-fn this)))))]))
+   [:dom/entered
+    (fn [this]
+      (let [timer (with-timeout timeout
+                    #(destruct-fn this))]
+        (dom/on this :click
+          (fn [e]
+            (.clearTimeout js/window timer)
+            (destruct-fn this)))))]))

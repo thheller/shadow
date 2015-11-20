@@ -4,12 +4,13 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
-  :dependencies [[org.clojure/clojure "1.7.0"]
-                 [org.clojure/core.async "0.2.371"]]
-  
-  :profiles {:dev {:source-paths ["dev"]
-                   :dependencies [[org.clojure/clojure "1.7.0"]
-                                  [thheller/shadow-devtools "0.1.34"]]}}
+  :dependencies [[org.clojure/core.async "0.2.371"]]
+
+  :profiles {:dev
+             {:source-paths ["dev"]
+              :dependencies [[org.clojure/clojure "1.7.0"]
+                             [thheller/shadow-build "1.0.167"]
+                             [org.clojure/clojurescript "1.7.170"]]}}
 
   :source-paths ["src/clj"
                  "src/cljs"]

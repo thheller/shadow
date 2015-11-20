@@ -10,7 +10,9 @@
             [clojure.string :as str]
             [cljs.core.async :as async]))
 
-(def transition-supported? (gst/isSupported))
+(def transition-supported?
+  (when (exists? js/window)
+    (gst/isSupported)))
 
 (defprotocol IElement
   (-to-dom [this]))
@@ -21,7 +23,7 @@
 (defn- lazy-native-coll-seq [coll idx]
   (when (< idx (.-length coll))
     (lazy-seq (cons (aget coll idx)
-                    (lazy-native-coll-seq coll (inc idx))))
+                (lazy-native-coll-seq coll (inc idx))))
     ))
 
 (deftype NativeColl [coll]
@@ -49,38 +51,38 @@
   ;; FIXME: this method is called alot, how expensive is this check?
   ;; protocols on native elements are funky
   (cond
-   (nil? el) nil
-   (implements? IElement el) (-to-dom ^not-native el)
-   (string? el) (.createTextNode js/document el)
-   (number? el) (.createTextNode js/document (str el))
-   :else el))
+    (nil? el) nil
+    (implements? IElement el) (-to-dom ^not-native el)
+    (string? el) (.createTextNode js/document el)
+    (number? el) (.createTextNode js/document (str el))
+    :else el))
 
 (def build dom-node)
 
-(defn ev-stop 
+(defn ev-stop
   ([e]
-     (if (.-stopPropagation e)
-       (do
-         (.stopPropagation e)
-         (.preventDefault e))
-       (do
-         (set! (.-cancelBubble e) true)
-         (set! (.-returnValue e) false)))
-     e)
+   (if (.-stopPropagation e)
+     (do
+       (.stopPropagation e)
+       (.preventDefault e))
+     (do
+       (set! (.-cancelBubble e) true)
+       (set! (.-returnValue e) false)))
+   e)
   ([e el]
-     (ev-stop e)
-     el)
+   (ev-stop e)
+   el)
   ;; new arity for sc/on
   ([e el scope owner]
-     (ev-stop e)
-     el))
+   (ev-stop e)
+   el))
 
 (defn contains?
   "check wether a parent node (or the document) contains the child"
   ([el]
-     (dom/contains js/document (dom-node el)))
+   (dom/contains js/document (dom-node el)))
   ([parent el]
-     (dom/contains (dom-node parent) (dom-node el))))
+   (dom/contains (dom-node parent) (dom-node el))))
 
 
 (defn add-class [el cls]
@@ -91,11 +93,11 @@
 
 (defn toggle-class
   ([el cls]
-     (gcls/toggle (dom-node el) cls))
+   (gcls/toggle (dom-node el) cls))
   ([el cls v]
-     (if v
-       (add-class el cls)
-       (remove-class el cls))))
+   (if v
+     (add-class el cls)
+     (remove-class el cls))))
 
 
 (defn has-class? [el cls]
@@ -115,26 +117,26 @@
         fdot (.indexOf spec ".")
         fhash (.indexOf spec "#")]
     (cond
-     (and (= -1 fdot) (= -1 fhash))
-     [spec nil nil]
+      (and (= -1 fdot) (= -1 fhash))
+      [spec nil nil]
 
-     (= -1 fhash)
-     [(.substring spec 0 fdot)
-      nil
-      (str/replace (.substring spec (inc fdot)) #"\." " ")]
+      (= -1 fhash)
+      [(.substring spec 0 fdot)
+       nil
+       (str/replace (.substring spec (inc fdot)) #"\." " ")]
 
-     (= -1 fdot)
-     [(.substring spec 0 fhash)
-      (.substring spec (inc fhash))
-      nil]
+      (= -1 fdot)
+      [(.substring spec 0 fhash)
+       (.substring spec (inc fhash))
+       nil]
 
-     (> fhash fdot)
-     (throw (str "cant have id after class?" spec))
+      (> fhash fdot)
+      (throw (str "cant have id after class?" spec))
 
-     :else
-     [(.substring spec 0 fhash)
-      (.substring spec (inc fhash) fdot)
-      (str/replace (.substring spec (inc fdot)) #"\." " ")])))
+      :else
+      [(.substring spec 0 fhash)
+       (.substring spec (inc fhash) fdot)
+       (str/replace (.substring spec (inc fdot)) #"\." " ")])))
 
 
 (defn create-dom-node [tag-def props]
@@ -145,22 +147,22 @@
 
     (when tag-classes
       (aset props "class" (merge-class-string (aget props "class") tag-classes)))
-    
+
     (dom/createDom tag-name props)
     ))
 
 ;; FIXME: throw on nil? trying to append nil should be an error, not ignored
 (defn append
   ([node]
-     (when node
-       (when-let [n (dom-node node)]
-         (.appendChild (.-body js/document) n)
-         n)))
+   (when node
+     (when-let [n (dom-node node)]
+       (.appendChild (.-body js/document) n)
+       n)))
   ([el node]
-     (when node
-       (when-let [n (dom-node node)]
-         (.appendChild (dom-node el) n)
-         n))))
+   (when node
+     (when-let [n (dom-node node)]
+       (.appendChild (dom-node el) n)
+       n))))
 
 (defn destructure-node
   [create-fn [nn np & nc :as node]]
@@ -168,12 +170,12 @@
     (throw (ex-info "invalid dom node" {:node node})))
 
   (cond
-   (and (nil? np) (nil? nc)) ;; [:div.something]
-   [(create-fn nn {}) '()]
-   (map? np) ;; [:div.something {:some "attr"}]
-   [(create-fn nn np) nc]
-   :else ;; [:div.something "content" "more-content"]
-   [(create-fn nn {}) (conj nc np)]))
+    (and (nil? np) (nil? nc)) ;; [:div.something]
+    [(create-fn nn {}) '()]
+    (map? np) ;; [:div.something {:some "attr"}]
+    [(create-fn nn np) nc]
+    :else ;; [:div.something "content" "more-content"]
+    [(create-fn nn {}) (conj nc np)]))
 
 ;; restore sanity!
 
@@ -223,7 +225,8 @@
   ([sel root] (NativeColl. (.querySelectorAll (dom-node root) sel))))
 
 ;; private, use on
-(def dom-listen (if (.-addEventListener js/document)
+(def dom-listen (if (or (not (exists? js/document))
+                        (.-addEventListener js/document))
                   (fn dom-listen-good [el ev handler]
                     (.addEventListener el ev handler false))
                   (fn dom-listen-ie [el ev handler]
@@ -234,7 +237,8 @@
                     )))
 
 ;; private, only works if you used dom-listen since on wrap the event handler
-(def dom-listen-remove (if (.-removeEventListener js/document)
+(def dom-listen-remove (if (or (not (exists? js/document))
+                               (.-removeEventListener js/document))
                          (fn dom-listen-remove-good [el ev handler]
                            (.removeEventListener el ev handler false))
                          (fn dom-listen-remove-ie [el ev handler]
@@ -249,12 +253,12 @@
 
 (defn on
   ([el ev handler]
-     (on el ev handler false))
+   (on el ev handler false))
   ([el ev handler capture]
-     (if (vector? ev)
-       (on-query el (first ev) (second ev) handler)
-       (let [handler (fn [e] (handler e el))]
-         (dom-listen (dom-node el) (name ev) handler)))))
+   (if (vector? ev)
+     (on-query el (first ev) (second ev) handler)
+     (let [handler (fn [e] (handler e el))]
+       (dom-listen (dom-node el) (name ev) handler)))))
 
 ;; only work when used with dom-listen, on will wrap the handler so you can't remove it
 (defn remove-event-handler [el ev handler]
@@ -277,7 +281,7 @@
 (defn replace-node [old new]
   ;; wth reverse
   (dom/replaceNode (dom-node new)
-                   (dom-node old)))
+    (dom-node old)))
 
 (defn text
   ([el new-text] (set! (.-innerText (dom-node el)) new-text))
@@ -286,8 +290,8 @@
 (defn check
   ([el] (check el true))
   ([el checked]
-     (set! (.-checked (dom-node el)) checked)
-     ))
+   (set! (.-checked (dom-node el)) checked)
+    ))
 
 (defn checked? [el] (.-checked (dom-node el)))
 
@@ -334,17 +338,17 @@
     :valign (.setAttribute el "vAlign" value)
     :width (.setAttribute el "width" value)
     :style (cond
-            (nil? value)
-            nil
+             (nil? value)
+             nil
 
-            (string? value)
-            (.setAttribute el "style" value)
+             (string? value)
+             (.setAttribute el "style" value)
 
-            (map? value)
-            (set-style el value)
+             (map? value)
+             (set-style el value)
 
-            :else
-            (gs/setStyle el value))
+             :else
+             (gs/setStyle el value))
     ;; FIXME: support :style maps
     (let [ks (name key)]
       (if (or (gstr/startsWith ks "data-")
@@ -354,12 +358,12 @@
 
 (defn set-attrs [el attrs]
   (reduce-kv
-   (fn [el key value]
-     ;; use special version, so we don't do (dom-node el) every time
-     (set-attr* el key value)
-     el)
-   (dom-node el)
-   attrs))
+    (fn [el key value]
+      ;; use special version, so we don't do (dom-node el) every time
+      (set-attr* el key value)
+      el)
+    (dom-node el)
+    attrs))
 
 (defn set-attr [el key value]
   (set-attr* (dom-node el) key value))
@@ -398,8 +402,8 @@
 
     (reduce (fn [s [script-tag script-body]]
               (str/replace s script-tag ""))
-            s
-            scripts)
+      s
+      scripts)
     ))
 
 (defn str->fragment [s]
@@ -439,11 +443,23 @@
     (doseq [it style-keys]
       (remove-style* el it))))
 
+
+(defrecord Coordinate [x y])
+
 (defn get-position [el]
+  (let [pos (gs/getPosition (dom-node el))]
+    (->Coordinate (.-x pos) (.-y pos))))
+
+(defn get-client-position [el]
   (let [pos (gs/getClientPosition (dom-node el))]
-    {:x (.-x pos) :y (.-y pos)}))
+    (->Coordinate (.-x pos) (.-y pos))))
+
+(defn get-page-offset [el]
+  (let [pos (gs/getPageOffset (dom-node el))]
+    (->Coordinate (.-x pos) (.-y pos))))
 
 (defrecord Size [w h])
+
 (defn size->clj [size]
   (Size. (.-width size) (.-height size)))
 
@@ -463,7 +479,7 @@
   (let [native (dom-node el)
         opts (aget native "options")]
     (areduce opts i ret []
-             (conj ret (aget opts i "value")))
+      (conj ret (aget opts i "value")))
     ))
 
 (defn build-url [path query-params]
@@ -471,19 +487,19 @@
     path
     (str path "?" (str/join "&" (map (fn [[k v]]
                                        (str (name k) "=" (js/encodeURIComponent (str v))))
-                                     query-params)))
+                                  query-params)))
     ))
 
 (defn redirect
   ([path]
-     (redirect path {}))
+   (redirect path {}))
   ([path query-params]
-     (aset js/document "location" "href" (build-url path query-params))
-     ))
+   (aset js/document "location" "href" (build-url path query-params))
+    ))
 
 (defn reload! []
   (set! (.. js/document -location -href)
-        (.. js/document -location -href)))
+    (.. js/document -location -href)))
 
 (defn tag-name [el]
   (let [dom (dom-node el)]
@@ -491,11 +507,11 @@
 
 (defn insert-after [ref new]
   (dom/insertSiblingAfter (dom-node new)
-                          (dom-node ref)))
+    (dom-node ref)))
 
 (defn insert-before [ref new]
   (dom/insertSiblingBefore (dom-node new)
-                           (dom-node ref)))
+    (dom-node ref)))
 
 (defn insert-first [ref new]
   (if-let [child (.-firstChild (dom-node ref))]
@@ -540,7 +556,7 @@
 
       (when tag-classes
         (.setAttribute el "class" (merge-class-string (:class props) tag-classes)))
-    
+
       (doseq [[k v] props]
         (.setAttributeNS el
           (when-let [ns (namespace k)]
@@ -552,9 +568,9 @@
 
 (defn svg-node [el]
   (cond
-   (nil? el) nil
-   (implements? SVGElement el) (-to-svg ^not-native el)
-   :else el))
+    (nil? el) nil
+    (implements? SVGElement el) (-to-svg ^not-native el)
+    :else el))
 
 (defn make-svg-node [structure]
   (let [[node node-children] (destructure-node create-svg-node structure)]
@@ -578,7 +594,7 @@
     (if (keyword? this)
       (make-svg-node [this])
       (throw (ex-info "strings cannot be in svgs" {:this this}))))
-  
+
   PersistentVector
   (-to-svg [this]
     (make-svg-node this))
@@ -608,26 +624,26 @@
    - false: never removed
    - chan: remove on msg/close"
   ([el event]
-     (event-chan el event nil false))
+   (event-chan el event nil false))
   ([el event xf]
-     (event-chan el event xf false))
+   (event-chan el event xf false))
   ([el event xf once-or-cleanup]
-     (let [buf (async/sliding-buffer 1)
-           chan (async/chan buf xf)
-           event-fn (fn event-fn [e]
-                      (async/put! chan e)
-                      (when (true? once-or-cleanup)
-                        (remove-event-handler el event event-fn)
-                        (async/close! chan)
-                        ))]
-       (dom-listen (dom-node el) (name event) event-fn)
-       
-       ;; when given a channel fire up a go that removes event handler when closed/msg
-       (when (and once-or-cleanup
-                  (not (true? once-or-cleanup)))
-         (go (<! once-or-cleanup)
-             (remove-event-handler el event event-fn)))
-       chan
-       )))
+   (let [buf (async/sliding-buffer 1)
+         chan (async/chan buf xf)
+         event-fn (fn event-fn [e]
+                    (async/put! chan e)
+                    (when (true? once-or-cleanup)
+                      (remove-event-handler el event event-fn)
+                      (async/close! chan)
+                      ))]
+     (dom-listen (dom-node el) (name event) event-fn)
+
+     ;; when given a channel fire up a go that removes event handler when closed/msg
+     (when (and once-or-cleanup
+                (not (true? once-or-cleanup)))
+       (go (<! once-or-cleanup)
+         (remove-event-handler el event event-fn)))
+     chan
+     )))
 
 
