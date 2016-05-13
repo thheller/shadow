@@ -163,9 +163,6 @@
                                  [nil nil])
            result-chan (async/chan 1)]
        
-       ;; FIXME: bad for CORS! but who uses http auth for anything serious?
-       (set! (.-responseType req) "text")
-
        (when (and body? upload)
          (dom/on (.-upload req) :loadstart (event-handler req upload :loadstart))
          (dom/on (.-upload req) :progress (event-handler req upload :progress))
@@ -202,6 +199,8 @@
        (.open req (name method) (as-url url) true)
 
        ;; must set after open
+       ;; FIXME: bad for CORS! but who uses http auth for anything serious?
+       (set! (.-responseType req) "text")
        (set! (.-withCredentials req) true)
 
        (when body?
