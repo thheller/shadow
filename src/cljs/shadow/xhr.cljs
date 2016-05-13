@@ -164,7 +164,6 @@
            result-chan (async/chan 1)]
        
        ;; FIXME: bad for CORS! but who uses http auth for anything serious?
-       (set! (.-withCredentials req) true)
        (set! (.-responseType req) "text")
 
        (when (and body? upload)
@@ -201,6 +200,9 @@
                                          (async/put! result-chan [status body req])))))))))
 
        (.open req (name method) (as-url url) true)
+
+       ;; must set after open
+       (set! (.-withCredentials req) true)
 
        (when body?
          (.setRequestHeader req "Content-Type" content-type))
