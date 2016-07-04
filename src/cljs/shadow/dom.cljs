@@ -407,7 +407,7 @@
     ))
 
 (defn str->fragment [s]
-  (NativeColl. (dom/htmlToDocumentFragment s)))
+  (NativeColl. (dom/safeHtmlToNode s)))
 
 (defn node-name [el]
   (.-nodeName (dom-node el)))
