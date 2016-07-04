@@ -407,7 +407,9 @@
     ))
 
 (defn str->fragment [s]
-  (NativeColl. (dom/safeHtmlToNode s)))
+  (let [el (js/document.createElement "div")]
+    (set! (.-innerHTML el) s)
+    (NativeColl. el)))
 
 (defn node-name [el]
   (.-nodeName (dom-node el)))
