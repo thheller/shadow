@@ -409,7 +409,7 @@
 (defn str->fragment [s]
   (let [el (js/document.createElement "div")]
     (set! (.-innerHTML el) s)
-    (NativeColl. el)))
+    (NativeColl. (dom/childrenToNode_ js/document el))))
 
 (defn node-name [el]
   (.-nodeName (dom-node el)))
