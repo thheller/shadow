@@ -1,4 +1,4 @@
-(ns shadow.route
+(ns shadow.legacy.route
   (:import goog.history.Html5History)
   (:require [clojure.data :as data]
             [goog.events :as gev]
