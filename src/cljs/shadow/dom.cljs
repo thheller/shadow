@@ -118,15 +118,15 @@
         fhash (.indexOf spec "#")]
     (cond
       (and (= -1 fdot) (= -1 fhash))
-      [spec nil nil]
+      [(str/upper-case spec) nil nil]
 
       (= -1 fhash)
-      [(.substring spec 0 fdot)
+      [(str/upper-case (.substring spec 0 fdot))
        nil
        (str/replace (.substring spec (inc fdot)) #"\." " ")]
 
       (= -1 fdot)
-      [(.substring spec 0 fhash)
+      [(str/upper-case (.substring spec 0 fhash))
        (.substring spec (inc fhash))
        nil]
 
@@ -134,7 +134,7 @@
       (throw (str "cant have id after class?" spec))
 
       :else
-      [(.substring spec 0 fhash)
+      [(str/upper-case (.substring spec 0 fhash))
        (.substring spec (inc fhash) fdot)
        (str/replace (.substring spec (inc fdot)) #"\." " ")])))
 

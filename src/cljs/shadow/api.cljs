@@ -16,7 +16,7 @@
    which means it triggers earlier"
   [script]
   (let [init-fn (dom/data script :fn)
-        dom-ref (dom/data script :ref) 
+        dom-ref (dom/data script :ref)
         args (dom/get-html script)
         args (when (and args (not= "" args))
                (reader/read-string args))
@@ -30,10 +30,10 @@
                (throw (ex-info "script tag with invalid dom ref" {:dom-ref dom-ref :init-fn init-fn :script script})))]
 
     (let [queued-fn (goog/getObjectByName init-fn)]
-    (if queued-fn
-      (do (log "init" init-fn)
-          (apply queued-fn args))
-      (log "unknown init function" init-fn args)))))
+      (if queued-fn
+        (do (log "init" init-fn)
+            (apply queued-fn args))
+        (log "unknown init function" init-fn args)))))
 
 (def available-namespaces (atom #{}))
 
@@ -44,17 +44,19 @@
   will pick remaining tags"
   [node]
   (doseq [script (dom/query "script[type=\"shadow/run\"]" node)
-            :let [fn (dom/data script :fn)
-                  fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
-            :when (contains? @available-namespaces fn-ns)]
-      (run-script-tag script)))
+          :let [fn (dom/data script :fn)
+                fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
+          :when (contains? @available-namespaces fn-ns)]
+    (run-script-tag script)))
 
 (defn ^:export ns-ready* [ns-name]
-  (log "ns-ready" ns-name)
-  (swap! available-namespaces conj ns-name)
-  (let [ns-name (str/replace ns-name #"-" "_")]
-    (doseq [script (dom/query "script[type=\"shadow/run\"]")
-            :let [fn (dom/data script :fn)
-                  fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
-            :when (= ns-name fn-ns)]
-      (run-script-tag script))))
+  ;; don't run things twice, not live-reload friendly
+  (when-not (contains? @available-namespaces ns-name)
+    (log "ns-ready" ns-name)
+    (swap! available-namespaces conj ns-name)
+    (let [ns-name (str/replace ns-name #"-" "_")]
+      (doseq [script (dom/query "script[type=\"shadow/run\"]")
+              :let [fn (dom/data script :fn)
+                    fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
+              :when (= ns-name fn-ns)]
+        (run-script-tag script)))))
