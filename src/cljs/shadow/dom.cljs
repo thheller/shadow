@@ -354,7 +354,8 @@
       (if (or (gstr/startsWith ks "data-")
               (gstr/startsWith ks "aria-"))
         (.setAttribute el ks value)
-        (aset el ks value)))))
+        (aset el ks value))))
+  el)
 
 (defn set-attrs [el attrs]
   (reduce-kv
