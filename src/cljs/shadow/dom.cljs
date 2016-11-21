@@ -225,25 +225,27 @@
   ([sel root] (NativeColl. (.querySelectorAll (dom-node root) sel))))
 
 ;; private, use on
-(def dom-listen (if (or (not (exists? js/document))
-                        (.-addEventListener js/document))
-                  (fn dom-listen-good [el ev handler]
-                    (.addEventListener el ev handler false))
-                  (fn dom-listen-ie [el ev handler]
-                    (try
-                      (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
-                      (catch js/Object e
-                        (.log js/console "didnt support attachEvent" el e)))
-                    )))
+(def dom-listen
+  (if (or (not (exists? js/document))
+          (.-addEventListener js/document))
+    (fn dom-listen-good [el ev handler]
+      (.addEventListener el ev handler false))
+    (fn dom-listen-ie [el ev handler]
+      (try
+        (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
+        (catch js/Object e
+          (.log js/console "didnt support attachEvent" el e)))
+      )))
 
 ;; private, only works if you used dom-listen since on wrap the event handler
-(def dom-listen-remove (if (or (not (exists? js/document))
-                               (.-removeEventListener js/document))
-                         (fn dom-listen-remove-good [el ev handler]
-                           (.removeEventListener el ev handler false))
-                         (fn dom-listen-remove-ie [el ev handler]
-                           (.detachEvent el (str "on" ev) handler))
-                         ))
+(def dom-listen-remove
+  (if (or (not (exists? js/document))
+          (.-removeEventListener js/document))
+    (fn dom-listen-remove-good [el ev handler]
+      (.removeEventListener el ev handler false))
+    (fn dom-listen-remove-ie [el ev handler]
+      (.detachEvent el (str "on" ev) handler))
+    ))
 ;; // private
 
 (defn on-query [root-el ev selector handler]
@@ -280,8 +282,7 @@
 
 (defn replace-node [old new]
   ;; wth reverse
-  (dom/replaceNode (dom-node new)
-    (dom-node old)))
+  (dom/replaceNode (dom-node new) (dom-node old)))
 
 (defn text
   ([el new-text] (set! (.-innerText (dom-node el)) new-text))
@@ -509,12 +510,14 @@
     (.-tagName dom)))
 
 (defn insert-after [ref new]
-  (dom/insertSiblingAfter (dom-node new)
-    (dom-node ref)))
+  (let [new-node (dom-node new)]
+    (dom/insertSiblingAfter new-node (dom-node ref))
+    new-node))
 
 (defn insert-before [ref new]
-  (dom/insertSiblingBefore (dom-node new)
-    (dom-node ref)))
+  (let [new-node (dom-node new)]
+    (dom/insertSiblingBefore new-node (dom-node ref))
+    new-node))
 
 (defn insert-first [ref new]
   (if-let [child (.-firstChild (dom-node ref))]
@@ -645,7 +648,7 @@
      (when (and once-or-cleanup
                 (not (true? once-or-cleanup)))
        (go (<! once-or-cleanup)
-         (remove-event-handler el event event-fn)))
+           (remove-event-handler el event event-fn)))
      chan
      )))
 

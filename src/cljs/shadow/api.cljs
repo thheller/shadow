@@ -49,7 +49,8 @@
           :when (contains? @available-namespaces fn-ns)]
     (run-script-tag script)))
 
-(defn ^:export ns-ready* [ns-name]
+(defn ns-ready**
+  [ns-name]
   ;; don't run things twice, not live-reload friendly
   (when-not (contains? @available-namespaces ns-name)
     (log "ns-ready" ns-name)
@@ -60,3 +61,10 @@
                     fn-ns (.substring fn 0 (.lastIndexOf fn "."))]
               :when (= ns-name fn-ns)]
         (run-script-tag script)))))
+
+(defn ^:export ns-ready*
+  "use (ns-ready) macro, do not use this directly"
+  [ns-name]
+  ;; use setTimeout so the blocking load of a script
+  ;; doesn't continue to block while running the init fns
+  (js/setTimeout #(ns-ready** ns-name) 0))
