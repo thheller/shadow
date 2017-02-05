@@ -147,6 +147,11 @@
           (str "." (el-selector parent) " &")
 
           (and (vector? parent)
+               (= 1 (count parent))
+               (and (satisfies? IElement (first parent))))
+          (str "." (el-selector (first parent)) " &")
+
+          (and (vector? parent)
                (= 2 (count parent)))
 
           (let [[el suffix] parent]
@@ -199,6 +204,10 @@
                (string? selector)
                (do (no-nested-rules! selector sub-rules)
                    (rule selector attrs))
+
+               (satisfies? IElement selector)
+               (do (no-nested-rules! selector sub-rules)
+                   (nested-rule selector attrs))
 
                (vector? selector)
                (do (no-nested-rules! selector sub-rules)

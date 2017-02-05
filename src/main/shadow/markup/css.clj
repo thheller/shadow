@@ -93,7 +93,9 @@
 
   (defstyled foo :div
     [_]
-    {:color "foo"})
+    {:color "foo"
+     bar
+     {:color "red"}})
 
   ;; this could be used to generate .css files to be used via <link .../>
   (println
