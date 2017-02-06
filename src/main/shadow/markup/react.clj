@@ -2,6 +2,9 @@
   (:refer-clojure :exclude [for map meta time])
   (:import (cljs.tagged_literals JSValue)))
 
+(defmacro defstyled [& args]
+  `(shadow.markup.css/defstyled ~@args))
+
 (def dom-elements
   '[a
     abbr

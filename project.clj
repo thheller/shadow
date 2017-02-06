@@ -1,11 +1,12 @@
-(defproject thheller/shadow-client "0.0-SNAPSHOT"
+(defproject thheller/shadow-client "1.0.186"
   :description "a cljs library for managed state in the shadows of the DOM"
   :url "http://github.com/thheller/shadow"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/core.async "0.2.395"]]
+  [[org.clojure/core.async "0.2.395"]
+   [hiccup "1.0.5"]]
 
   :source-paths
   ["src/main"]

@@ -2,9 +2,8 @@
   "EXPERIMENTAL - DO NOT USE"
   (:refer-clojure :exclude [for map meta time])
   (:require-macros [shadow.markup.react :as m])
-  (:require [cljsjs.react]
-    ;; [cljsjs.react.dom]
-            ))
+  ;; (:require [cljsjs.react]) ;; assume this is provided somewhere else
+  )
 
 (defn for [& args]
   (throw (ex-info "shadow.markup.react/for is a macro" {})))
