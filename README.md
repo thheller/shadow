@@ -2,6 +2,13 @@
 
 Some useful CLJS things. Stuff I collected over the past few years and use in a couple projects. Didn't want to create a library for each one so they ended up here.
 
+
+## Current version
+
+```clojure
+[thheller/shadow-client "1.0.183"]
+```
+
 ## Useful and Current
 
 - [shadow.markup](https://github.com/thheller/shadow/wiki/shadow.markup)
