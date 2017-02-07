@@ -18,6 +18,8 @@
           "&:hover"
           {:border-width 4}}}
 
+        ;; FIXME: can't really guarantee that media will be after hover
+        ;; the above will be an array-map so this works here
         [test-test test-test-hover media :as css-rules]
         (gen/css-rules styles "test" "test")]
 
@@ -36,3 +38,21 @@
   (is (empty? (gen/css-rules {"&:hover" {}} "test" "test")))
   (is (empty? (gen/css-rules {"@media thing" {}} "test" "test"))))
 
+
+(deftest element-should-not-require-props
+  (let [el
+        (css/element* "test" "test" (fn [_] {}))
+
+        expected
+        "<test class=\"test\"></test>"
+
+        s1
+        (el)
+
+        s2
+        (el {})
+        ]
+
+    (is (= expected s1))
+    (is (= expected s2))
+    ))

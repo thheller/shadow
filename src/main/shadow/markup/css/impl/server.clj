@@ -49,7 +49,8 @@
 (defn merge-props-and-class [props class]
   ;; FIXME: should warn if :classes and :className is present
   (let [class-from-props
-        (or (:className props)
+        (or (:class props)
+            (:className props)
             (when-let [classes (:classes props)]
               (if (map? classes)
                 ;; {:selected boolean-ish}
@@ -72,8 +73,8 @@
           (str class " " class-from-props))]
 
     (-> props
-        (assoc :class className)
-        (dissoc :classes :className))))
+        (dissoc :classes :className)
+        (assoc :class className))))
 
 (defn gen-nested-html [children]
   (reduce
@@ -85,14 +86,20 @@
     ""
     children))
 
-(defn gen-html [el props children]
-  ;; FIXME: be more like hiccup and let props be optional
-  {:pre [(map? props)]}
+(defn gen-html [el maybe-props children]
   (let [tag
         (gen/el-type el)
 
+        selector
+        (gen/el-selector el)
+
+        props?
+        (map? maybe-props)
+
         props
-        (merge-props-and-class props (gen/el-selector el))
+        (if props?
+          (merge-props-and-class maybe-props selector)
+          {:class selector})
 
         child-html
         (gen-nested-html children)]
@@ -101,6 +108,8 @@
       (vswap! *used-elements* conj el))
 
     (str "<" tag (render-attr-map props) ">"
+         (when-not props?
+           (comp/render-html maybe-props))
          child-html
          "</" tag ">")))
 
