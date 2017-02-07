@@ -11,6 +11,21 @@
 
 (declare map->root)
 
+(defn gen-el-selector
+  "called from macro, assumes ns as clojure.lang.Namespace and el-name as a symbol"
+  [ns el-name]
+  (let [ns
+        (or (-> ns meta :shadow.markup.css/alias)
+            (str ns))
+
+        el-name
+        (or (-> el-name meta :shadow.markup.css/alias)
+            (name el-name))]
+    (-> (str ns "--" el-name)
+        ;; FIXME: some more munging might be required?
+        ;; css selectors probably don't allow some chars that are otherwise ok in an ns/name ($!? come to mind)
+        (str/replace #"\." (constantly "-")))))
+
 (defn css-rules [root tag class]
   (let [root
         (if (map? root)

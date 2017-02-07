@@ -1,6 +1,6 @@
-(ns shadow.markup.css.impl.react
+(ns shadow.markup.react.impl.css
   (:require [clojure.string :as str]
-            [shadow.markup.react :as html]
+            [shadow.markup.react.impl.interop :as interop]
             [shadow.markup.css.impl.gen :as gen]
             [shadow.dom :as dom]
             [goog.async.nextTick]))
@@ -146,9 +146,7 @@
     (-> props
         (dissoc :class :classes)
         (assoc :className className)
-        (html/convert-props))))
-
-
+        (interop/convert-props))))
 
 (defn styled-element-invoke [el props children]
   ;; style-fn is replaced after it is run once
@@ -162,8 +160,8 @@
         el-type
         (gen/el-type el)]
     (if (map? props)
-      (html/create-element* el-type (merge-props-and-class props css-sel) children)
-      (html/create-element* el-type #js {:className css-sel} (cons props children)))))
+      (interop/create-element* el-type (merge-props-and-class props css-sel) children)
+      (interop/create-element* el-type #js {:className css-sel} (cons props children)))))
 
 (deftype StyledElement
   [el-type css-sel style-fn ^:mutable injected?]

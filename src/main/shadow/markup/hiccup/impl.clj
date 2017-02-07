@@ -1,4 +1,4 @@
-(ns shadow.markup.css.impl.server
+(ns shadow.markup.hiccup.impl
   (:require [shadow.markup.css.impl.gen :as gen]
             [clojure.string :as str]
             [hiccup.util :as util]

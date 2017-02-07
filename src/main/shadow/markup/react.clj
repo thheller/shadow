@@ -2,13 +2,9 @@
   (:refer-clojure :exclude [for map meta time])
   (:import (cljs.tagged_literals JSValue)))
 
-;; FIXME: can do this due to cyclic dependency
-;; will probably move all react related stuff here
-;; and hiccup related stuff somewhere else
-;; and give up on the plan of having one namespace for both platforms
-;; one namespace mean that every dependency for the clojure version
-;; also becomes dependency of cljs version which sucks.
-#_ (defmacro defstyled [& args] `(shadow.markup.css/defstyled ~@args))
+;; will eventually become the main macro, for now just alias
+(defmacro defstyled [& args]
+  `(shadow.markup.css/defstyled ~@args))
 
 (def dom-elements
   '[a
@@ -153,16 +149,16 @@
 
        (cond
          (instance? JSValue head#)
-         `(shadow.markup.react/create-element* ~tag# ~head# ~(JSValue. tail#))
+         `(shadow.markup.react.impl.interop/create-element* ~tag# ~head# ~(JSValue. tail#))
 
          (map? head#)
-         `(shadow.markup.react/create-element* ~tag# ~(JSValue. head#) ~(JSValue. tail#))
+         `(shadow.markup.react.impl.interop/create-element* ~tag# ~(JSValue. head#) ~(JSValue. tail#))
 
          (= 'nil head#)
-         `(shadow.markup.react/create-element* ~tag# ~(JSValue. {}) ~(JSValue. tail#))
+         `(shadow.markup.react.impl.interop/create-element* ~tag# ~(JSValue. {}) ~(JSValue. tail#))
 
          :else
-         `(shadow.markup.react/create-element ~tag# ~(JSValue. args#))
+         `(shadow.markup.react.impl.interop/create-element ~tag# ~(JSValue. args#))
          ))))
 
 (defmacro define-element-macro []
@@ -173,7 +169,7 @@
 (defn ^:private gen-dom-fn [tag]
   `(defn ~tag
      [& args#]
-     (shadow.markup.react/create-element ~(name tag) args#)))
+     (shadow.markup.react.impl.interop/create-element ~(name tag) args#)))
 
 (defmacro define-elements []
   `(do

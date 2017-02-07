@@ -1,7 +1,7 @@
 (ns shadow.markup.css
   (:require-macros [shadow.markup.css :as m])
   (:require [shadow.markup.css.impl.gen :as gen]
-            [shadow.markup.css.impl.react :as impl]))
+            [shadow.markup.react.impl.css :as impl]))
 
 (defn set-env! [env]
   (impl/set-env! env))

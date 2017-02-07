@@ -1,38 +1,30 @@
 (ns shadow.markup.css
   (:require [clojure.string :as str]
             [shadow.markup.css.impl.gen :as gen]
-            [shadow.markup.css.impl.server :as server]))
-
-(defn- gen-el-selector [ns name]
-  (-> (str ns "--" name)
-      ;; FIXME: some more munging might be required?
-      ;; css selectors probably don't allow some chars that are otherwise ok in an ns/name ($!? come to mind)
-      (str/replace #"\." (constantly "-"))))
-
-(defmacro defstyled [el-name el-type args & body]
-  {:pre [(symbol? el-name) ;; simple-symbol? 1.9 only
-         (keyword? el-type)
-         (vector? args)
-         (= 1 (count args))]}
-
-  (let [el-selector
-        (gen-el-selector
-          (or (-> *ns* meta :shadow.markup.css/alias)
-              (str *ns*))
-          (or (-> el-name meta :shadow.markup.css/alias)
-              (name el-name)))]
-
-    `(def ~(vary-meta el-name assoc :shadow.markup.css/element true)
-       (shadow.markup.css/element*
-         ~(name el-type)
-         ~el-selector
-         (fn ~args
-           ~@body)))))
+            [shadow.markup.hiccup.impl :as hiccup]))
 
 (defn element*
   "use defstyled macro"
   [el-type el-selector style-fn]
-  (server/->StyledElement el-type el-selector style-fn))
+  (hiccup/->StyledElement el-type el-selector style-fn))
+
+(defmacro defstyled
+  "(defstyled my-div :div
+     [env]
+     {:color \"red\"})"
+  [el-name el-type args & body]
+  {:pre [(symbol? el-name)
+         (keyword? el-type)
+         (vector? args)
+         (= 1 (count args))]}
+
+  (let [el-selector (gen/gen-el-selector *ns* el-name)]
+    `(def ~(vary-meta el-name assoc :shadow.markup.css/element true)
+       (element*
+         ~(name el-type)
+         ~el-selector
+         (fn ~args
+           ~@body)))))
 
 (defn root [attrs & rules]
   (gen/root* attrs rules))
@@ -117,7 +109,7 @@
         (volatile! #{})
 
         html
-        (binding [server/*used-elements* used]
+        (binding [hiccup/*used-elements* used]
           (el1 {:data-x "yo" :data-y true}
             ;; meh on the assumption of hiccup
             [:h1 "hello world"]
