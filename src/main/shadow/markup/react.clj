@@ -2,8 +2,13 @@
   (:refer-clojure :exclude [for map meta time])
   (:import (cljs.tagged_literals JSValue)))
 
-(defmacro defstyled [& args]
-  `(shadow.markup.css/defstyled ~@args))
+;; FIXME: can do this due to cyclic dependency
+;; will probably move all react related stuff here
+;; and hiccup related stuff somewhere else
+;; and give up on the plan of having one namespace for both platforms
+;; one namespace mean that every dependency for the clojure version
+;; also becomes dependency of cljs version which sucks.
+#_ (defmacro defstyled [& args] `(shadow.markup.css/defstyled ~@args))
 
 (def dom-elements
   '[a

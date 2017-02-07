@@ -2,50 +2,126 @@
   (:require [clojure.string :as str]
             [shadow.markup.react :as html]
             [shadow.markup.css.impl.gen :as gen]
-            [shadow.dom :as dom])
-  )
+            [shadow.dom :as dom]
+            [goog.async.nextTick]))
 
 (defonce env-ref (volatile! {}))
 
 (defonce active-elements-ref
+  ;; FIXME: is sorting useful?
+  ;; {classname-of-el el-instance}
+  ;; keyed by classname since live-reloading will create a new el-instance
+  ;; which can't remove the old instance since it is not equal
+  (volatile! (sorted-map)))
+
+(defonce style-cache-ref
   (volatile! {}))
 
+(defn get-css-for-el [env el]
+  (let [name (gen/el-selector el)]
+    (or (get @style-cache-ref name)
+        (let [css
+              (->> (gen/css-rules-for-el env el)
+                   (str/join "\n"))]
+          (vswap! style-cache-ref assoc name css)
+          css
+          ))))
+
+(defonce regen-pending-ref (volatile! false))
+
+(defn style-container []
+  (let [styles-container-id "shadow-markup-styles"]
+    (or (dom/by-id styles-container-id)
+        (let [node (dom/build [:style {:id styles-container-id :type "text/css"}])]
+          (dom/append js/document.head node)
+          node))))
+
+(defonce flush-id-seq (volatile! 0))
+
+(defn flush-styles!
+  "user can call this early (ie. after calling ReactDOM.render)"
+  []
+  (let [flush-id
+        (vswap! flush-id-seq inc)
+
+        label-start
+        (str "generate/start#" flush-id)
+
+        label-finish
+        (str "generate/finish#" flush-id)
+
+        mark?
+        (and js/performance
+             js/performance.mark)]
+
+    (when mark?
+      (js/performance.mark label-start))
+
+    (let [env
+          @env-ref
+
+          styles
+          (->> @active-elements-ref
+               (vals)
+               (map #(get-css-for-el env %))
+               (str/join "\n"))
+
+          container
+          (style-container)]
+
+      (set! (.-textContent container) styles))
+
+    (when mark?
+      (js/performance.mark label-finish)
+      (js/performance.measure (str "shadow-markup-styles/flush#" flush-id) label-start label-finish)))
+
+  (vreset! regen-pending-ref false))
+
+(defn maybe-flush-styles! []
+  (when @regen-pending-ref
+    (flush-styles!)))
+
+(defn regenerate-styles! []
+  ;; FIXME: FOUC when doing it async, not really a viable strategy.
+  #_(when-not @regen-pending-ref
+      (vreset! regen-pending-ref true)
+      (js/goog.async.nextTick maybe-flush-styles!))
+
+  (flush-styles!))
+
 (defn set-env! [new-env]
+  (vreset! env-ref new-env)
+  (vreset! style-cache-ref {})
+
   (when-not (empty? @active-elements-ref)
-    (js/console.log "TBD regenerate styles" new-env @active-elements-ref))
-  (vreset! env-ref new-env))
+    (regenerate-styles!)))
 
+(defn inject-rules! [el]
+  (let [selector (gen/el-selector el)]
+    (vswap! style-cache-ref dissoc selector)
+    (vswap! active-elements-ref assoc selector el)
+    (regenerate-styles!)))
 
-;; FIXME: determine performance of injecting a bunch of <style> nodes vs CSSStylesheet.addRule
-;; not using goog.style since it now requires the safe-style stuff, which we don't need really
-(defn style-container [id]
-  (let [el (dom/by-id id)]
-    (if-not (nil? el)
-      (do (dom/reset el)
-          el)
-      (let [node (dom/build [:style {:id id :type "text/css"}])]
-        (dom/insert-first (dom/query-one "HEAD") node)
-        node))))
+(defn check-conflicting-props! [{:keys [class className classes] :as props}]
+  (let [total
+        (cond-> 0
+          class
+          (inc)
+          className
+          (inc)
+          classes
+          (inc))]
 
-(defn inject-rule [el]
-  (let [text
-        (gen/generate-css @env-ref el)
-
-        css-sel
-        (gen/el-selector el)
-
-        container
-        (style-container css-sel)
-
-        node
-        (js/document.createTextNode text)]
-    (.appendChild container node)
+    (when (> total 1)
+      (throw (ex-info "conflicting props, can only have one of: class className classes" props)))
     ))
 
 (defn merge-props-and-class [props class]
-  ;; FIXME: should warn if :classes and :className is present
+  (check-conflicting-props! props)
+
   (let [class-from-props
-        (or (:className props)
+        (or (:class props)
+            (:className props)
             (when-let [classes (:classes props)]
               (if (map? classes)
                 ;; {:selected boolean-ish}
@@ -68,19 +144,16 @@
           (str class " " class-from-props))]
 
     (-> props
+        (dissoc :class :classes)
         (assoc :className className)
-        (dissoc :classes)
         (html/convert-props))))
 
-;; called from macro, to make things live-reload friendly
-(defn forget-rule! [css-sel]
-  (vswap! active-elements-ref dissoc css-sel))
+
 
 (defn styled-element-invoke [el props children]
   ;; style-fn is replaced after it is run once
   (when (not (.-injected? el))
-    (forget-rule! (gen/el-selector el))
-    (inject-rule el)
+    (inject-rules! el)
     (set! (.-injected? el) true))
 
   (let [css-sel
@@ -99,49 +172,43 @@
     el-type)
   (el-selector [_]
     css-sel)
-  (el-css [_ env]
-    (style-fn env)
-    ))
+  (el-root [_ env]
+    (style-fn env))
 
-;; starting to regret this, having the macro generate a vararg would be simpler
-;; but I want a way to access the css-sel on a styled element
-;; so nested-rule can work
-(extend-type StyledElement
-  cljs.core/IFn
-  (-invoke
-    ([el props]
-     (styled-element-invoke el props []))
-    ([el props c1]
-     (styled-element-invoke el props [c1]))
-    ([el props c1 c2]
-      (styled-element-invoke el props [c1 c2]))
-    ([el props c1 c2 c3]
-      (styled-element-invoke el props [c1 c2 c3]))
-    ([el props c1 c2 c3 c4]
-      (styled-element-invoke el props [c1 c2 c3 c4]))
-    ([el props c1 c2 c3 c4 c5]
-      (styled-element-invoke el props [c1 c2 c3 c4 c5]))
-    ([el props c1 c2 c3 c4 c5 c6]
-      (styled-element-invoke el props [c1 c2 c3 c4 c5 c6]))
-    ([el props c1 c2 c3 c4 c5 c6 c7]
-      (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8]
-      (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9]
-      (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]))
-    ([el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]
-     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]))
-    ))
-
+  IFn
+  (-invoke [el props]
+    (styled-element-invoke el props []))
+  (-invoke [el props c1]
+    (styled-element-invoke el props [c1]))
+  (-invoke [el props c1 c2]
+    (styled-element-invoke el props [c1 c2]))
+  (-invoke [el props c1 c2 c3]
+    (styled-element-invoke el props [c1 c2 c3]))
+  (-invoke [el props c1 c2 c3 c4]
+    (styled-element-invoke el props [c1 c2 c3 c4]))
+  (-invoke [el props c1 c2 c3 c4 c5]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]))
+  (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]
+    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]))
+  ;; FIXME: add more
+  )

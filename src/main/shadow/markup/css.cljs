@@ -6,6 +6,9 @@
 (defn set-env! [env]
   (impl/set-env! env))
 
+(defn flush-styles! []
+  (impl/flush-styles!))
+
 (defn root [attrs & rules]
   (gen/root* attrs rules))
 

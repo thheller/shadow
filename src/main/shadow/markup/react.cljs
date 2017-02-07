@@ -8,7 +8,7 @@
 (defn for [& args]
   (throw (ex-info "shadow.markup.react/for is a macro" {})))
 
-(def element-marker
+(def ^{:private true} element-marker
   (-> (js/React.createElement "div" nil)
       (js/goog.object.get "$$typeof")))
 

@@ -110,7 +110,7 @@
     el-type)
   (el-selector [_]
     el-selector)
-  (el-css [_ env]
+  (el-root [_ env]
     (style-fn env))
 
   IFn

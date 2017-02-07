@@ -1,43 +1,43 @@
 (ns shadow.markup.css.impl.gen
-  (:require [clojure.string :as str])
-  #?(:cljs
-     (:import [goog.string StringBuffer])))
+  (:require [clojure.string :as str]))
 
 (defprotocol IElement
   (el-selector [x])
   (el-type [x])
-  (el-css [x env]))
+  (el-root [x env]))
 
 (defprotocol IStyleGen
-  (gen-css [x writer tag class]))
+  (gen-css-rules [x tag class] "generate a sequence of strings (css-rules)"))
 
 (declare map->root)
 
-(defn generate-css
+(defn css-rules [root tag class]
+  (let [root
+        (if (map? root)
+          (map->root root)
+          root)]
+
+    (gen-css-rules root tag class)
+    ))
+
+(defn css-rules-for-el
   [env el]
-  (let [rule
-        (el-css el env)
+  (let [root
+        (el-root el env)
 
         tag
         (el-type el)
 
         class
-        (el-selector el)
+        (el-selector el)]
 
-        sb
-        #?(:cljs
-           (StringBuffer.)
-           :clj
-           (StringBuilder.)) ;; StringBuffer synchronized in java
+    (css-rules root tag class)))
 
-        rule
-        (if (map? rule)
-          (map->root rule)
-          rule)]
-
-    (gen-css rule sb tag class)
-    (.toString sb)
-    ))
+(def number-as-str-props
+  #{:flex
+    :font-weight
+    :z-index
+    :opacity})
 
 (defn css-value-to-str [key value]
   (cond
@@ -45,42 +45,38 @@
     value
 
     (number? value)
-    (if (zero? value)
+    (cond
+      (zero? value)
       "0"
-      (case key
-        :flex (str value)
-        :font-weight (str value)
-        :z-index (str value)
-        :opacity (str value)
-        (str value "px")))
+
+      (contains? number-as-str-props key)
+      (str value)
+
+      :else
+      (str value "px"))
 
     (vector? value)
-    (let [[t r b l]
-          value]
-      (->> value
-           (map #(css-value-to-str key %))
-           (str/join " "))
-      )))
+    (->> value
+         (map #(css-value-to-str key %))
+         (str/join " "))
+    ))
 
-(defn -write-css-attrs [writer attrs]
+(defn gen-rule-attrs [attrs]
   (reduce-kv
-    (fn [_ key value]
-      (doto writer
-        (.append "\n  ")
-        (.append (name key))
-        (.append ": ")
-        (.append (css-value-to-str key value))
-        (.append ";")))
-    nil
+    (fn [s key value]
+      (str s "\n  " (name key) ": " (css-value-to-str key value) ";"))
+    ""
     attrs))
 
-(defn -write-rule [writer selector attrs]
-  (when (seq attrs)
-    (doto writer
-      (.append selector)
-      (.append " {")
-      (-write-css-attrs attrs)
-      (.append "\n}\n\n"))))
+(defn gen-rule [selector attrs]
+  ;; safe-guard against invalid rules
+  {:pre [(seq attrs)
+         (string? selector)
+         (every? keyword? (keys attrs))]}
+
+  (str selector " {"
+       (gen-rule-attrs attrs)
+       "\n}"))
 
 (defn merge-selector [selector tag class]
   (cond
@@ -92,33 +88,46 @@
     :else
     (str/replace selector #"&" (str tag "." class))))
 
-(deftype Rule [type selector attrs rules]
+(deftype Rule [type selector attrs nested-rules]
   IStyleGen
-  (gen-css [this writer tag class]
+  (gen-css-rules [this tag class]
     (case type
       :root
-      (do (-write-rule writer (str tag "." class) attrs)
-          (doseq [rule rules]
-            (gen-css rule writer tag class)))
+      (let [self
+            (if (seq attrs)
+              [(gen-rule (str tag "." class) attrs)]
+              [])]
+
+        (->> nested-rules
+             (mapcat #(gen-css-rules % tag class))
+             (into self)))
 
       :rule
-      (let [selector (merge-selector selector tag class)]
-        (-write-rule writer selector attrs)
-        (doseq [rule rules]
-          (gen-css rule writer tag class)))
+      (let [self
+            (if (seq attrs)
+              (let [selector (merge-selector selector tag class)]
+                [(gen-rule selector attrs)])
+              [])]
+
+        (->> nested-rules
+             (mapcat #(gen-css-rules % tag class))
+             (into self)))
 
       :group
-      (do (doto writer
-            (.append selector)
-            (.append " {\n\n"))
+      (let [nested
+            (mapcat #(gen-css-rules % tag class) nested-rules)]
 
-          (-write-rule writer (str tag "." class) attrs)
-          (doseq [rule rules]
-            (gen-css rule writer tag class))
-
-          (doto writer
-            (.append "\n}\n\n")))
-      )))
+        (if (and (not (seq attrs))
+                 (not (seq nested)))
+          ;; group has not attrs or nested rules, don't generate a rule
+          []
+          ;; generate one rule that combines all other rules
+          [(str selector " {\n"
+                (when (seq attrs)
+                  (gen-rule (str tag "." class) attrs))
+                (when (seq nested)
+                  (str "\n" (str/join "\n" nested)))
+                "\n}")])))))
 
 (defn rule? [x]
   (instance? Rule x))

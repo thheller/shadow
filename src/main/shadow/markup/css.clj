@@ -83,7 +83,7 @@
 (defn generate-css-for-elements
   [env elements]
   (->> elements
-       (map #(gen/generate-css env %))
+       (mapcat #(gen/css-rules-for-el env %))
        (str/join "\n")))
 
 (comment
