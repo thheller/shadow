@@ -210,3 +210,35 @@
     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]))
   ;; FIXME: add more
   )
+
+(comment
+  ;; crazy idea I had for :advanced mode
+  ;; CollapseProperties renames all defstyled to global names
+  ;; these end up on js/window (with everything else ...)
+  ;; we can just map over them and check for the IElement protocol
+  ;; so we get a collection of all defstyled elements that survived
+  ;; :advanced and could be used to inject all styles in one go.
+  ;; but given the insane amount of variables on js/window
+  ;; this turns out to be quite costly also not sure I actually want to rely on this
+  ;; as this can easily mess things up, and won't work with :output-wrapper
+
+  ;; still a fun idea
+
+  ;; produces a warning on access
+  (def blacklist #{"webkitStorageInfo"})
+
+  (defn ^:export find-elements []
+    (js/console.time "find-elements")
+    (let [src
+          js/window
+
+          surviving-elements
+          (->> (js/goog.object.getKeys src)
+               (array-seq)
+               (remove blacklist)
+               (map #(js/goog.object.get src %))
+               (filter #(implements? gen/IElement %))
+               (into []))]
+
+      (js/console.timeEnd "find-elements")
+      (js/console.log "find-elements" (into-array surviving-elements)))))
