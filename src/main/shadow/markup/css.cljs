@@ -21,4 +21,4 @@
 (defn element*
   "don't use directly, use defstyled macro"
   [el-type el-selector style-fn]
-  (impl/->StyledElement el-type el-selector style-fn false))
+  (impl/StyledElement. el-type el-selector style-fn false))

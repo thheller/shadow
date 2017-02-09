@@ -48,14 +48,10 @@
         (str "generate/start#" flush-id)
 
         label-finish
-        (str "generate/finish#" flush-id)
+        (str "generate/finish#" flush-id)]
 
-        mark?
-        (and js/performance
-             js/performance.mark)]
-
-    (when mark?
-      (js/performance.mark label-start))
+    #_(when mark?
+        (js/performance.mark label-start))
 
     (let [env
           @env-ref
@@ -71,9 +67,9 @@
 
       (set! (.-textContent container) styles))
 
-    (when mark?
-      (js/performance.mark label-finish)
-      (js/performance.measure (str "shadow-markup-styles/flush#" flush-id) label-start label-finish)))
+    #_(when mark?
+        (js/performance.mark label-finish)
+        (js/performance.measure (str "shadow-markup-styles/flush#" flush-id) label-start label-finish)))
 
   (vreset! regen-pending-ref false))
 
