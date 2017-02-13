@@ -22,7 +22,7 @@
 
     :dependencies
     [[org.clojure/clojure "1.9.0-alpha14"]
-     [thheller/shadow-build "1.0.246"]
-     [org.clojure/clojurescript "1.9.456"]]}}
+     [thheller/shadow-build "1.0.248"]
+     [org.clojure/clojurescript "1.9.473"]]}}
 
   )

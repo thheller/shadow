@@ -1,44 +1,48 @@
 (ns shadow.vault.store
-  (:require [clojure.spec :as spec]))
+  (:require [clojure.spec :as s]))
 
-(spec/def ::key
-  (spec/cat
+(s/def ::key
+  (s/cat
     :key-name
     simple-symbol?
 
     :doc
-    (spec/? string?)
+    (s/? string?)
 
     :body
-    (spec/*
-      (spec/cat
+    (s/*
+      (s/cat
         :key
-        #{:init :spec}
+        #{:init :spec :id-spec :value-spec}
 
         :value
         any?))))
 
 (defmacro defkey [& form]
-  (let [form-data (spec/conform ::key form)]
-    (when (= :clojure.spec/invalid form-data)
-      (throw (ex-info "invalid defkey" (spec/explain-data ::key form))))
+  (let [{:keys [key-name body] :as form-data}
+        (s/conform ::key form)
 
-    (let [{:keys [key-name body]}
-          form-data
+        key-id
+        (keyword (str *ns*) (str key-name))
 
-          key-id
-          (keyword (str *ns*) (str key-name))
+        key-data
+        (reduce
+          (fn [m {:keys [key value]}]
+            (assoc m key value))
+          {}
+          body)]
 
-          key-data
-          (reduce
-            (fn [m {:keys [key value]}]
-              (assoc m key value))
-            {}
-            body)]
+    `(def ~key-name
+       (shadow.vault.store/vault-key
+         ~key-id
+         ~(:init key-data)
+         ~(:id-spec key-data)
+         ~(or (:value-spec key-data)
+              (:spec key-data))))
+    ))
 
-      `(do (def ~key-name (shadow.vault.store/vault-key ~key-id))
-           (shadow.vault.store/register ~key-id ~key-data))
-      )))
+(s/fdef defkey
+  :args ::key)
 
 (defmacro defaction
   [name-sym & [spec]]

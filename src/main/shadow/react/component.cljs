@@ -214,7 +214,7 @@
 ;; better if we could just call the fn directly as this is called a lot
 
 (defn make-component-prototype
-  [{::keys [should-update?] :as config}]
+  [{::keys [should-update? render] :as config}]
   #js {:shadow$config
        config
 
@@ -250,14 +250,6 @@
                      :pending-props nil)
                    (call ::will-mount))))))
 
-       :shouldComponentUpdate
-       (fn [next-props next-state]
-         (if (nil? should-update?)
-           true
-           (this-as this
-             ;; pending-props
-             (query this ::should-update?))))
-
        :componentWillUpdate
        (fn [next-props next-state]
          (this-as this
@@ -291,18 +283,25 @@
                    (assoc :prev-props props)
                    (call ::did-mount))))))
 
-
        :componentWillUnmount
        (fn []
          (this-as this
            (update-data this #(call % ::will-unmount))
            (vswap! active-components-ref dissoc (get-ref this))))
 
+       :shouldComponentUpdate
+       (fn [next-props next-state]
+         (this-as this
+           (if (nil? should-update?)
+             true
+             (should-update? (get-shadow this))
+             )))
+
        :render
        (fn []
          (this-as this
-           ;; (js/console.log "render" (-> this (get-data) ::config ::type))
-           (query this ::render)))})
+           (render (get-shadow this))
+           ))})
 
 (defn create-element* [component-fn props children]
   (let [{::keys [type key-fn] :as config}

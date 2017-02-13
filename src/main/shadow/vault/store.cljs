@@ -6,56 +6,66 @@
             [shadow.vault.env :as env]
             [shadow.vault.context :as ctx]
             [shadow.vault.schedule :as schedule]
-            [shadow.react.component :as comp]))
+            [shadow.react.component :as comp :refer (deffactory)]
+            [goog.async.nextTick]))
 
 ;; KEY STUFF
 
-(def ^:private key-registry-ref (volatile! {}))
+(defprotocol IKey
+  (key-init [key])
+  (key-check-value! [key value]))
 
-(defrecord VaultKey [tag id]
+(defrecord VaultKey [tag id init-fn id-spec value-spec]
   IFn
   (-invoke [_ new-id]
-    (VaultKey. tag new-id)))
+    (when id-spec
+      (when-not (s/valid? id-spec new-id)
+        (js/console.warn "INVALID ID FOR KEY"
+          key
+          new-id
+          (s/explain-str id-spec new-id)
+          (s/explain-data id-spec new-id))
+
+        (throw (ex-info "unacceptable id for key" {:key key :id new-id}))
+        ))
+
+    (VaultKey. tag new-id init-fn id-spec value-spec))
+
+  IKey
+  (key-init [key]
+    (when init-fn
+      (let [value
+            (if (= id ::static)
+              (init-fn)
+              (init-fn id))]
+        (key-check-value! key value)
+        value
+        )))
+
+  (key-check-value! [_ value]
+    (when value-spec
+      (when-not (s/valid? value-spec value)
+        (js/console.warn "INVALID VALUE FOR KEY"
+          key
+          (s/explain-str value-spec value)
+          (s/explain-data value-spec value))
+
+        (throw (ex-info "unacceptable value for key"
+                 {:key key
+                  :value value}))))))
 
 (defn vault-key
-  [value]
-  (->VaultKey value ::static))
+  [value init-fn id-spec value-spec]
+  {:pre [(or (nil? init-fn) (ifn? init-fn))]}
+  (->VaultKey value ::static init-fn id-spec value-spec))
 
-(defn key-check-value! [key value]
-  ;; FIXME: allow to disable this in production
-
-  (when-let [spec (get-in @key-registry-ref [(:tag key) :spec])]
-    (when-not (s/valid? spec value)
-      (js/console.warn "INVALID VALUE FOR KEY"
-        key
-        (s/explain-str spec value)
-        (s/explain-data spec value))
-
-      (throw (ex-info "unacceptable value for key"
-               {:key key
-                :value value})))))
-
-(defn key-init [{:keys [id tag] :as key}]
-  (when-let [init-fn (get-in @key-registry-ref [tag :init])]
-    (let [value
-          (if (= id ::static)
-            (init-fn)
-            (init-fn id))]
-      (key-check-value! key value)
-      value
-      )))
-
-(defn register [key-id {:keys [validate] :as key-spec}]
-  (vswap! key-registry-ref assoc key-id key-spec))
-
-(defn key? [x]
-  (instance? VaultKey x))
-
-(defn acceptable-key? [actual expected id-spec]
-  (and (key? actual)
-       (key? expected)
-       (= (:type expected) (:type actual))
-       (s/valid? id-spec (:id actual))))
+(defn key?
+  ([x]
+   (instance? VaultKey x))
+  ([x y]
+   (and (key? x)
+        (key? y)
+        (= :tag x) (:tag y))))
 
 ;; ACTIONS
 
@@ -96,6 +106,10 @@
   (ActionFactory. id spec))
 
 ;; VAULT STUFF
+
+(defprotocol IStore
+  (store-get [store])
+  (store-swap! [store before after keys-new keys-updated keys-removed keys-touched]))
 
 (defprotocol IBranch
   (branch [vault new-handlers]))
@@ -260,6 +274,17 @@
             completed?
             )))))
 
+(deftype DefaultStore [store-id data-ref]
+  IStore
+  (store-get [_]
+    @data-ref)
+
+  (store-swap! [_ before after keys-new keys-updated keys-removed keys-touched]
+    (when-not (identical? before @data-ref)
+      (throw (ex-info "someone touched the vault while in a transation!" {})))
+
+    (vreset! data-ref after)))
+
 (defn- run-action [vault action]
   {:pre [(instance? Action action)]}
 
@@ -287,15 +312,15 @@
   ;; FIXME: should this init the key or not?
   (get @vault key)
 
-  #_ (let [value
-        ]
-    (if (not= ::not-found value)
-      value
-      (when-let [init-value (key-init key)]
-        (js/console.warn "did init but did not store it in vault!")
-        ;; (vswap! data-ref assoc key init-value)
-        init-value
-        ))))
+  #_(let [value
+          ]
+      (if (not= ::not-found value)
+        value
+        (when-let [init-value (key-init key)]
+          (js/console.warn "did init but did not store it in vault!")
+          ;; (vswap! data-ref assoc key init-value)
+          init-value
+          ))))
 
 (defrecord TransactionResult
   [actions
@@ -306,19 +331,19 @@
    data-before
    data-after])
 
-(deftype Vault [data-ref handlers]
+(deftype Vault [data-store handlers]
   IBranch
   (branch [this new-handlers]
-    (Vault. data-ref (into handlers new-handlers)))
+    (Vault. data-store (into handlers new-handlers)))
 
   IDeref
   (-deref [_]
-    (-deref data-ref))
+    (store-get data-store))
 
   ITransact
   (transact! [this actions]
     (let [data-before
-          @data-ref
+          (store-get data-store)
 
           transacted-data
           (TransactedData.
@@ -328,57 +353,49 @@
             (transient #{}) ;; new
             (transient #{}) ;; updated
             (transient #{}) ;; removed
-            (transient [])
-            false) ;; actions
+            (transient []) ;; actions
+            false)
 
           result
-          (run-actions transacted-data actions)]
+          (run-actions transacted-data actions)
 
-      (when-not (identical? data-before @data-ref)
-        (throw (ex-info "someone touched the vault while in a transation!" {})))
-
-      ;; FIXME: run in nextTick?
-      (let [keys-new
-            (tx-keys-new result)
-
-            keys-updated
-            (tx-keys-updated result)
-
-            keys-removed
-            (tx-keys-removed result)
-
-            keys-touched
-            (set/union keys-new keys-updated keys-removed)
-
-            data-after
-            (-> @result
-                (update ::version inc))]
-
-        (vreset! data-ref data-after)
-
-        (schedule/add-dirty-keys! keys-touched)
-
-        ;; safeguard to ensure nobody stores a reference to a vault somewhere
-        ;; and tries to write to it outside a transact! as any of those changes would be lost
-        (set! (.-completed? result) true)
-
-        (try
-          (let [side-effects (tx-commit-actions result)]
-            (doseq [side-effect side-effects]
-              (side-effect this)))
-          (catch :default e
-            (js/console.error "ERROR WHILE PROCESSING COMMIT ACTION" e)))
-
-        ;; FIXME: 99% of cases this is unused
-        (TransactionResult.
-          actions
           keys-new
+          (tx-keys-new result)
+
           keys-updated
+          (tx-keys-updated result)
+
           keys-removed
+          (tx-keys-removed result)
+
           keys-touched
-          data-before
-          data-after)
-        ))))
+          (set/union keys-new keys-updated keys-removed)
+
+          data-after
+          (-> @result
+              (update ::version inc))
+
+          side-effects
+          (tx-commit-actions result)]
+
+      (store-swap! data-store data-before data-after keys-new keys-updated keys-removed keys-touched)
+
+      (schedule/add-dirty-keys! keys-touched)
+
+      ;; safeguard to ensure nobody stores a reference to a vault somewhere
+      ;; and tries to write to it outside a transact! as any of those changes would be lost
+      (set! (.-completed? result) true)
+
+      (if-not (seq side-effects)
+        ::success
+        (do (js/goog.async.nextTick
+              (fn []
+                (try
+                  (doseq [side-effect side-effects]
+                    (side-effect this))
+                  (catch :default e
+                    (js/console.error "ERROR WHILE PROCESSING COMMIT ACTION" e)))))
+            ::pending)))))
 
 (defn on-commit!
   ([vault callback]
@@ -581,11 +598,8 @@
         (set-render-fn))
       ))
 
-(def Root
-  {::comp/type
-   ::root
-
-   ::comp/constructor
+(deffactory root*
+  {::comp/constructor
    (fn [{::comp/keys [context]
          :keys [props]
          :as this}
@@ -595,10 +609,6 @@
    ::comp/render
    (fn [this]
      (get-in this [:props :root-el]))})
-
-(def root*
-  (-> Root
-      (comp/factory)))
 
 (defn root
   "prefer to inject context directly"
@@ -613,12 +623,14 @@
   "creates a new empty store
    this should be treated totally opaque and you should never directly interact with it
    - only pass into context"
-  []
-  (volatile! {::version 0}))
+  ([]
+   (empty ::default))
+  ([store-id]
+   (DefaultStore. store-id (volatile! {::version 0}))))
 
 (defn vault
   ([handlers]
-    (vault (empty) handlers))
+   (vault (empty) handlers))
   ([data-ref handlers]
    (Vault. data-ref handlers)))
 
