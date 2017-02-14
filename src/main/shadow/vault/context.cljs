@@ -1,7 +1,7 @@
 (ns shadow.vault.context
-  (:require [shadow.react.component :as comp]))
+  (:require [shadow.react.component :as comp :refer (deffactory)]))
 
-(def ShadowContext
+(deffactory shadow-context
   {::comp/type
    ::context
 
@@ -16,8 +16,4 @@
    ::comp/render
    (fn [this]
      (get-in this [:props :root]))})
-
-(def shadow-context
-  (-> ShadowContext
-      (comp/factory)))
 

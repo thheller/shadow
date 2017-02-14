@@ -4,7 +4,7 @@
   (:require [shadow.vault.store :as store :refer (defaction)]
             [shadow.vault.dom :as vdom]
             [shadow.markup.react :as html]
-            [shadow.react.component :as comp]
+            [shadow.react.component :as comp :refer (deffactory)]
             [shadow.dom :as dom]
             [shadow.util :refer (go!)]
             [cljs.core.async :as async]
@@ -32,65 +32,58 @@
 (defn footer [props & children]
   (html/div #js {:className "dialog-footer"} children))
 
-(def Host
-  {::comp/type ::host
+(deffactory host
+  (-> {::store/read
+       (fn [this vault {::keys [key] :as props}]
+         (get vault key))
 
-   ::store/read
-   (fn [this vault {::keys [key] :as props}]
-     (get vault key))
+       ::comp/render
+       (fn [{::store/keys [vault]
+             :keys [props data]
+             :as this}]
+         (let [key
+               (::key props)
 
-   ::comp/render
-   (fn [{::store/keys [vault]
-         :keys [props data]
-         :as this}]
-     (let [key
-           (::key props)
+               {:keys [open dialog-props]}
+               data]
 
-           {:keys [open dialog-props]}
-           data]
+           (when open
+             (html/div nil
+               (html/div #js {:className "dialog-backdrop"
+                              :ref "backdrop"
+                              :onClick
+                              (fn [e]
+                                (.preventDefault e)
+                                (store/transact! vault [($backdrop-click)]))})
 
-       (when open
-         (html/div nil
-           (html/div #js {:className "dialog-backdrop"
-                          :ref "backdrop"
-                          :onClick
-                          (fn [e]
-                            (.preventDefault e)
-                            (store/transact! vault [($backdrop-click)]))})
+               (let [view-fn (::view props)]
+                 (view-fn (assoc dialog-props ::key key)))))))
 
-           (let [view-fn (::view props)]
-             (view-fn (assoc dialog-props ::key key)))))))
+       ::comp/did-update
+       (fn [{:keys [data prev-data] :as this}]
+         (let [was-open
+               (:open prev-data)
 
-   ::comp/did-update
-   (fn [{:keys [data prev-data] :as this}]
-     (let [was-open
-           (:open prev-data)
+               is-open
+               (:open data)]
 
-           is-open
-           (:open data)]
+           (cond
+             (and (not was-open) is-open)
+             (dom/set-style js/document.body {:overflow "hidden"})
 
-       (cond
-         (and (not was-open) is-open)
-         (dom/set-style js/document.body {:overflow "hidden"})
+             (and was-open (not is-open))
+             (dom/remove-style js/document.body :overflow)
 
-         (and was-open (not is-open))
-         (dom/remove-style js/document.body :overflow)
+             :else
+             nil))
 
-         :else
-         nil))
-
-     this
-     )})
-
-(def host
-  (-> Host
+         this
+         )}
       (store/component)
-      (comp/factory)))
+      ))
 
-(def Remote
-  {::comp/type ::remote
-
-   ::comp/did-mount
+(deffactory remote*
+  {::comp/did-mount
    (fn [{::comp/keys [context] :keys [props] :as this}]
      (let [dom (dom/build [:div.dialog-root])]
        (dom/append dom)
@@ -107,10 +100,6 @@
    ::comp/render
    (fn [this]
      nil)})
-
-(def remote*
-  (-> Remote
-      (comp/factory)))
 
 (defn remote [dialog-key dialog-view props]
   (-> props

@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [shadow.markup.react.impl.interop :as interop]
             [shadow.markup.css.impl.gen :as gen]
+            [shadow.markup.env :as env]
             [shadow.dom :as dom]
             [goog.async.nextTick]))
 
@@ -17,17 +18,14 @@
 (defonce style-cache-ref
   (volatile! {}))
 
-(defn get-css-for-el [env el]
+(defn get-rules-for-el [env el]
   (let [name (gen/el-selector el)]
     (or (get @style-cache-ref name)
         (let [css
-              (->> (gen/css-rules-for-el env el)
-                   (str/join "\n"))]
+              (gen/css-rules-for-el env el)]
           (vswap! style-cache-ref assoc name css)
           css
           ))))
-
-(defonce regen-pending-ref (volatile! false))
 
 (defn style-container []
   (let [styles-container-id "shadow-markup-styles"]
@@ -36,54 +34,38 @@
           (dom/append js/document.head node)
           node))))
 
-(defonce flush-id-seq (volatile! 0))
+(defn insert-styles!
+  "inserts rules for a single el using sheet.insertRule"
+  [el]
+  (let [container
+        (style-container)
 
-(defn flush-styles!
-  "user can call this early (ie. after calling ReactDOM.render)"
+        n
+        (.. container -sheet -rules -length)
+
+        rules
+        (get-rules-for-el @env-ref el)]
+
+    (dotimes [i (count rules)]
+      (.. container -sheet (insertRule (nth rules i) (+ n i))))
+    ))
+
+(defn regenerate-styles!
+  "generates a css string and replace the textContent of the <style> container"
   []
-  (let [flush-id
-        (vswap! flush-id-seq inc)
+  (let [env
+        @env-ref
 
-        label-start
-        (str "generate/start#" flush-id)
+        styles
+        (->> @active-elements-ref
+             (vals)
+             (mapcat #(get-rules-for-el env %))
+             (str/join "\n"))
 
-        label-finish
-        (str "generate/finish#" flush-id)]
+        container
+        (style-container)]
 
-    #_(when mark?
-        (js/performance.mark label-start))
-
-    (let [env
-          @env-ref
-
-          styles
-          (->> @active-elements-ref
-               (vals)
-               (map #(get-css-for-el env %))
-               (str/join "\n"))
-
-          container
-          (style-container)]
-
-      (set! (.-textContent container) styles))
-
-    #_(when mark?
-        (js/performance.mark label-finish)
-        (js/performance.measure (str "shadow-markup-styles/flush#" flush-id) label-start label-finish)))
-
-  (vreset! regen-pending-ref false))
-
-(defn maybe-flush-styles! []
-  (when @regen-pending-ref
-    (flush-styles!)))
-
-(defn regenerate-styles! []
-  ;; FIXME: FOUC when doing it async, not really a viable strategy.
-  #_(when-not @regen-pending-ref
-      (vreset! regen-pending-ref true)
-      (js/goog.async.nextTick maybe-flush-styles!))
-
-  (flush-styles!))
+    (set! (.-textContent container) styles)))
 
 (defn set-env! [new-env]
   (vreset! env-ref new-env)
@@ -96,7 +78,22 @@
   (let [selector (gen/el-selector el)]
     (vswap! style-cache-ref dissoc selector)
     (vswap! active-elements-ref assoc selector el)
-    (regenerate-styles!)))
+
+    ;; when using many elements for the first time
+    ;; each element will cause a re-parse of all previously generated css rules
+    ;; since we replace the textContent of the <style> element
+    ;; the better option would be to use style.sheet.insertRule
+    ;; but that has the effect of not being able to modify styles in devtools
+    ;; which is annoying, so we only do it when env/DEBUG is false
+
+    (if ^boolean env/DEBUG
+      (regenerate-styles!)
+      (try
+        (insert-styles! el)
+        (catch :default e
+          (js/console.error "insert-styles failed" e el)
+          ;; fallback in case insertRule fails
+          (regenerate-styles!))))))
 
 (defn check-conflicting-props! [{:keys [class className classes] :as props}]
   (let [total
@@ -113,7 +110,8 @@
     ))
 
 (defn merge-props-and-class [props class]
-  (check-conflicting-props! props)
+  (when ^boolean env/DEBUG
+    (check-conflicting-props! props))
 
   (let [class-from-props
         (or (:class props)
@@ -206,35 +204,3 @@
     (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]))
   ;; FIXME: add more
   )
-
-(comment
-  ;; crazy idea I had for :advanced mode
-  ;; CollapseProperties renames all defstyled to global names
-  ;; these end up on js/window (with everything else ...)
-  ;; we can just map over them and check for the IElement protocol
-  ;; so we get a collection of all defstyled elements that survived
-  ;; :advanced and could be used to inject all styles in one go.
-  ;; but given the insane amount of variables on js/window
-  ;; this turns out to be quite costly also not sure I actually want to rely on this
-  ;; as this can easily mess things up, and won't work with :output-wrapper
-
-  ;; still a fun idea
-
-  ;; produces a warning on access
-  (def blacklist #{"webkitStorageInfo"})
-
-  (defn ^:export find-elements []
-    (js/console.time "find-elements")
-    (let [src
-          js/window
-
-          surviving-elements
-          (->> (js/goog.object.getKeys src)
-               (array-seq)
-               (remove blacklist)
-               (map #(js/goog.object.get src %))
-               (filter #(implements? gen/IElement %))
-               (into []))]
-
-      (js/console.timeEnd "find-elements")
-      (js/console.log "find-elements" (into-array surviving-elements)))))
