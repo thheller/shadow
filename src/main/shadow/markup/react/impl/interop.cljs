@@ -45,6 +45,9 @@
       (nil? head)
       (create-element* type #js {} tail)
 
+      (element? head)
+      (create-element* type #js {} args)
+
       (object? head)
       (create-element* type head tail)
 

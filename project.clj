@@ -14,7 +14,6 @@
   :test-paths
   ["src/test"]
 
-
   :profiles
   {:dev
    {:source-paths

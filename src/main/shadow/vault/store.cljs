@@ -42,7 +42,7 @@
         value
         )))
 
-  (key-check-value! [_ value]
+  (key-check-value! [key value]
     (when value-spec
       (when-not (s/valid? value-spec value)
         (js/console.warn "INVALID VALUE FOR KEY"
@@ -65,7 +65,8 @@
   ([x y]
    (and (key? x)
         (key? y)
-        (= :tag x) (:tag y))))
+        (= (:tag x)
+           (:tag y)))))
 
 ;; ACTIONS
 
