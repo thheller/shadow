@@ -54,10 +54,10 @@
 (defaction toggle)
 
 (defaction set-namespace
-  (s/spec string?))
+  string?)
 
 (defaction set-key
-  (s/spec store/key?))
+  store/key?)
 
 (defkey Namespaces
   :spec
@@ -69,7 +69,7 @@
 
 (defkey Settings
   :spec
-  (s/spec any?)
+  any?
   :init
   (fn [_]
     {:show? false

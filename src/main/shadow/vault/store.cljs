@@ -11,53 +11,64 @@
 
 ;; KEY STUFF
 
-(defprotocol IKey
-  (key-init [key])
-  (key-check-value! [key value]))
+;; FIXME: this prevents any key from ever being removed by DCE
+;; as closure doesn't understand clojure datastructures and won't remove things from ref types
+;; I tried moving things into the VaultKey but they are supposed to be simple data values
+;; putting functions and specs into them breaks that, can't just serialize them over the wire and
+;; expect them to come out in tact on the other side
+;; but given that keys do not account for much code at all the DCE issue is not important
+(defonce key-registry-ref (volatile! {}))
 
-(defrecord VaultKey [tag id init-fn id-spec value-spec]
+(defn key-check-value! [key value]
+  (when-let [value-spec (get-in @key-registry-ref [(:tag key) :value-spec])]
+    (when-not (s/valid? value-spec value)
+      (js/console.warn "INVALID VALUE FOR KEY"
+        key
+        (s/explain-str value-spec value)
+        (s/explain-data value-spec value))
+
+      (throw (ex-info "unacceptable value for key"
+               {:key key
+                :value value})))))
+
+(defn key-check-id! [key id]
+  (when-let [id-spec (get-in @key-registry-ref [(:tag key) :id-spec])]
+    (when-not (s/valid? id-spec id)
+      (js/console.warn "INVALID ID FOR KEY"
+        key
+        id
+        (s/explain-str id-spec id)
+        (s/explain-data id-spec id))
+
+      (throw (ex-info "unacceptable id for key" {:key key :id id}))
+      )))
+
+(defn key-init [{:keys [tag id] :as key}]
+  (when-let [init-fn (get-in @key-registry-ref [tag :init-fn])]
+    (let [value
+          (if (= id ::static)
+            (init-fn)
+            (init-fn id))]
+      (key-check-value! key value)
+      value
+      )))
+
+(defrecord VaultKey [tag id]
   IFn
-  (-invoke [_ new-id]
-    (when id-spec
-      (when-not (s/valid? id-spec new-id)
-        (js/console.warn "INVALID ID FOR KEY"
-          key
-          new-id
-          (s/explain-str id-spec new-id)
-          (s/explain-data id-spec new-id))
+  (-invoke [key new-id]
+    (key-check-id! key new-id)
+    (VaultKey. tag new-id)))
 
-        (throw (ex-info "unacceptable id for key" {:key key :id new-id}))
-        ))
-
-    (VaultKey. tag new-id init-fn id-spec value-spec))
-
-  IKey
-  (key-init [key]
-    (when init-fn
-      (let [value
-            (if (= id ::static)
-              (init-fn)
-              (init-fn id))]
-        (key-check-value! key value)
-        value
-        )))
-
-  (key-check-value! [key value]
-    (when value-spec
-      (when-not (s/valid? value-spec value)
-        (js/console.warn "INVALID VALUE FOR KEY"
-          key
-          (s/explain-str value-spec value)
-          (s/explain-data value-spec value))
-
-        (throw (ex-info "unacceptable value for key"
-                 {:key key
-                  :value value}))))))
-
-(defn vault-key
-  [value init-fn id-spec value-spec]
-  {:pre [(or (nil? init-fn) (ifn? init-fn))]}
-  (->VaultKey value ::static init-fn id-spec value-spec))
+(defn make-key
+  "do not use directly - use defkey macro"
+  [tag init-fn id-spec value-spec]
+  {:pre [(qualified-keyword? tag)
+         (or (nil? init-fn) (ifn? init-fn))]}
+  (vswap! key-registry-ref assoc tag
+    {:init-fn init-fn
+     :id-spec id-spec
+     :value-spec value-spec})
+  (->VaultKey tag ::static))
 
 (defn key?
   ([x]
@@ -82,16 +93,16 @@
   (Action. id data))
 
 ;; dont use directly, use via defaction
-(defrecord ActionFactory [id schema]
+(defrecord ActionFactory [id spec]
   IFn
   (-invoke [_]
     (Action. id nil))
 
   (-invoke [_ data]
     (when ^boolean env/DEBUG
-      (when-not (s/valid? schema data)
-        (js/console.warn "INVALID ACTION" (s/explain-str schema data) (s/explain-data schema data))
-        (throw (ex-info (str "INVALID ACTION\n" (s/explain-str schema data))
+      (when-not (s/valid? spec data)
+        (js/console.warn "INVALID ACTION" (s/explain-str spec data) (s/explain-data spec data))
+        (throw (ex-info (str "INVALID ACTION\n" (s/explain-str spec data))
                  {:action id
                   :data data}))))
 

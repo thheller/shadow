@@ -33,12 +33,14 @@
           body)]
 
     `(def ~key-name
-       (shadow.vault.store/vault-key
+       (shadow.vault.store/make-key
          ~key-id
          ~(:init key-data)
-         ~(:id-spec key-data)
-         ~(or (:value-spec key-data)
-              (:spec key-data))))
+         (cljs.spec/spec
+           ~(:id-spec key-data))
+         (cljs.spec/spec
+           ~(or (:value-spec key-data)
+                (:spec key-data)))))
     ))
 
 (s/fdef defkey

@@ -1,7 +1,8 @@
 (ns shadow.react.component
   "EXPERIMENTAL - DO NOT USE"
   (:require-macros [shadow.react.component :as m])
-  (:require [cljsjs.react]))
+  (:require [cljsjs.react]
+            [cljs.spec :as s]))
 
 (defonce active-components-ref (volatile! {}))
 
@@ -305,40 +306,46 @@
 
 (defn create-element* [component-fn props children]
   (let [{::keys [type key-fn] :as config}
-        (-> component-fn (js/goog.object.get "shadow$config"))
+        (-> component-fn (js/goog.object.get "shadow$config"))]
 
-        final-props
-        (dissoc props :react-key :react-ref)
+    (when-some [props-spec (::props config)]
+      (when-not (s/valid? props-spec props)
+        ;; FIXME: remove explain, probably nicer to not throw
+        ;; maybe just render a dummy error element?
+        (s/explain props-spec props)
+        (throw (ex-info (str "invalid props for component " type)
+                 (assoc (s/explain-data props-spec props)
+                   ::type type
+                   ::props props)))))
 
+    (let [final-props
+          (dissoc props :react-key :react-ref)
+
+          react-props
+          #js {:shadow$props final-props}]
+
+      (when-let [ref (:react-ref props)]
+        (js/goog.object.set react-props "ref" ref))
+
+      (if key-fn
+        (let [key (key-fn props)]
+          (when (nil? key)
+            (throw (ex-info (str ":key-fn on " type " was set but returned nil") props)))
+          (js/goog.object.set react-props "key" key))
+
+        (when-let [key (:react-key props)]
+          (js/goog.object.set react-props "key" key)))
+
+      (js/goog.object.set
         react-props
-        #js {:shadow$props final-props}]
+        "children"
+        (let [c (bounded-count 2 children)]
+          (condp = c
+            0 nil
+            1 (first children)
+            children)))
 
-    (when-let [pc (::props config)]
-      ;; FIXME: implement props validation
-      )
-
-    (when-let [ref (:react-ref props)]
-      (js/goog.object.set react-props "ref" ref))
-
-    (if key-fn
-      (let [key (key-fn props)]
-        (when (nil? key)
-          (throw (ex-info (str ":key-fn on " type " was set but returned nil") props)))
-        (js/goog.object.set react-props "key" key))
-
-      (when-let [key (:react-key props)]
-        (js/goog.object.set react-props "key" key)))
-
-    (js/goog.object.set
-      react-props
-      "children"
-      (let [c (bounded-count 2 children)]
-        (condp = c
-          0 nil
-          1 (first children)
-          children)))
-
-    (js/React.createElement component-fn react-props)))
+      (js/React.createElement component-fn react-props))))
 
 
 (defn make-component

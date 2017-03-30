@@ -302,7 +302,7 @@
     (update route :children sort-routes)
     route))
 
-(def route-keys #{:match :handler :enter :exit :focus :blur :children})
+(def route-keys #{:match :handler :enter :exit :focus :blur :props :children})
 
 (defn validate-route [{:keys [match handler enter exit focus blur] :as route}]
   (let [test-keys (into #{} (keys route))]
