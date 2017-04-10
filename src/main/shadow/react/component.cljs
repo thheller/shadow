@@ -30,7 +30,8 @@
   (js/goog.object.get props "shadow$props"))
 
 (defn get-shadow [react]
-  {:pre [(react? react)]}
+  (when-not (react? react)
+    (throw (ex-info "invalid react ref" {:ref react})))
   (js/goog.object.get react "shadow$component"))
 
 (defn set-shadow [react data]
@@ -309,6 +310,9 @@
         (-> component-fn (js/goog.object.get "shadow$config"))]
 
     (when-some [props-spec (::props config)]
+      (when-not (s/spec? props-spec)
+        (throw (ex-info "invalid props spec for type" {:type type})))
+
       (when-not (s/valid? props-spec props)
         ;; FIXME: remove explain, probably nicer to not throw
         ;; maybe just render a dummy error element?

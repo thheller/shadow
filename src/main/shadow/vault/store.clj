@@ -51,7 +51,9 @@
   (let [id (keyword (str *ns*) (str name-sym))]
     `(def ~name-sym
        (if ~(with-meta 'shadow.vault.env/DEBUG {:tag 'boolean})
-         (shadow.vault.store/action-factory ~id ~spec)
+         (shadow.vault.store/action-factory ~id
+           ~(when spec
+              `(cljs.spec/spec ~spec)))
          (shadow.vault.store/action-factory ~id nil))
        )))
 

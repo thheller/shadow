@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/core.async "0.2.395"]
+  [[org.clojure/core.async "0.3.442"]
    [hiccup "1.0.5"]]
 
   :source-paths
@@ -20,8 +20,8 @@
     ["src/dev"]
 
     :dependencies
-    [[org.clojure/clojure "1.9.0-alpha14"]
-     [thheller/shadow-build "1.0.248"]
+    [[org.clojure/clojure "1.9.0-alpha15"]
+     [thheller/shadow-build "1.0.280"]
      [org.clojure/clojurescript "1.9.473"]]}}
 
   )
