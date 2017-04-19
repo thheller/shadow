@@ -137,10 +137,12 @@
 
 (defmacro for
   "same as clojure.core/for just not lazy"
-  [bindings & body]
-  `(doall
-     (cljs.core/for ~bindings
-       ~@body)))
+  [bindings body]
+  `(let [arr# (cljs.core/array)]
+     (cljs.core/doseq ~bindings
+       (.push arr# ~body))
+     arr#
+     ))
 
 (defn gen-dom-macro [name]
   `(defmacro ~name [& args#]

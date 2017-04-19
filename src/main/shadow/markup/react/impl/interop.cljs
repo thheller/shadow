@@ -1,12 +1,13 @@
-(ns shadow.markup.react.impl.interop)
+(ns shadow.markup.react.impl.interop
+  (:require [goog.object :as gobj]))
 
 (def ^{:private true} element-marker
   (-> (js/React.createElement "div" nil)
-      (js/goog.object.get "$$typeof")))
+      (gobj/get "$$typeof")))
 
 (defn element? [x]
   (and (object? x)
-       (= element-marker (js/goog.object.get x "$$typeof"))))
+       (= element-marker (gobj/get x "$$typeof"))))
 
 (defn convert-props [props]
   (cond
@@ -22,7 +23,7 @@
 ;; props is a js object
 ;; children is an array
 (defn create-element* [type props children]
-  (js/goog.object.set
+  (gobj/set
     props
     "children"
     (let [c (count children)]

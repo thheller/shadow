@@ -2,26 +2,29 @@
 
 ;; wrapping everything in a delay so things can be removed by Closure if not used
 (defmacro deffactory [name body]
-  (let [type (keyword (str *ns*) (str name))]
-    `(let [config#
-           (-> ~body
-               (delay))
+  (let [type
+        (keyword (str *ns*) (str name))
 
-           component#
-           (-> (deref config#)
+        cmp
+        (-> (str name "$init")
+            (symbol)
+            (with-meta {:tag 'not-native}))]
+
+    ;; FIXME: not proper to introduce a new var but takes care of some DCE issues
+    `(do (def ~cmp
+           (-> ~body
                (assoc :shadow.react.component/type ~type)
                (shadow.react.component/make-component)
-               (delay))]
+               (delay)))
 
-       (defn ~name [props# & children#]
-         (shadow.react.component/create-element* (deref component#) props# children#))
+         (defn ~name [props# & children#]
+           (shadow.react.component/create-element* (cljs.core/-deref ~cmp) props# children#))
 
-       ;; React-interop, some things require access to the component constructor
-       ;; (deffactory my-component ...) @my-component
-       ;; I prefer this over always declaring two vars one for the component one for the factory
-       (cljs.core/specify! ~name
-         cljs.core/IDeref
-         (~'-deref [x#]
-           (cljs.core/-deref component#)))
+         ;; React-interop, some things require access to the component constructor
+         ;; (deffactory my-component ...) @my-component or @my-component$init
+         (cljs.core/specify! ~name
+           cljs.core/IDeref
+           (~'-deref [x#]
+             (cljs.core/-deref ~cmp)))
 
-       (js/goog.object.set ~name "shadow$component" #(deref config#)))))
+         (js/goog.object.set ~name "shadow$component" #(cljs.core/-deref ~cmp)))))

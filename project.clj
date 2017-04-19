@@ -5,23 +5,12 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/core.async "0.3.442"]
+  [[org.clojure/clojurescript "1.9.518" :scope "provided"]
+   [org.clojure/core.async "0.3.442"]
    [hiccup "1.0.5"]]
 
   :source-paths
   ["src/main"]
 
   :test-paths
-  ["src/test"]
-
-  :profiles
-  {:dev
-   {:source-paths
-    ["src/dev"]
-
-    :dependencies
-    [[org.clojure/clojure "1.9.0-alpha15"]
-     [thheller/shadow-build "1.0.280"]
-     [org.clojure/clojurescript "1.9.473"]]}}
-
-  )
+  ["src/test"])

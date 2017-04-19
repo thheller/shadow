@@ -2,7 +2,8 @@
   "EXPERIMENTAL - DO NOT USE"
   (:require-macros [shadow.react.component :as m])
   (:require [cljsjs.react]
-            [cljs.spec :as s]))
+            [cljs.spec :as s]
+            [goog.object :as gobj]))
 
 (defonce active-components-ref (volatile! {}))
 
@@ -19,7 +20,7 @@
 
 (defn react? [x]
   (and (some? x)
-       (map? (js/goog.object.get x "shadow$component"))))
+       (map? (gobj/get x "shadow$component"))))
 
 (defn shadow? [x]
   (and x
@@ -27,16 +28,16 @@
        (ref? (::ref x))))
 
 (defn get-shadow-props [props]
-  (js/goog.object.get props "shadow$props"))
+  (gobj/get props "shadow$props"))
 
 (defn get-shadow [react]
   (when-not (react? react)
     (throw (ex-info "invalid react ref" {:ref react})))
-  (js/goog.object.get react "shadow$component"))
+  (gobj/get react "shadow$component"))
 
 (defn set-shadow [react data]
   {:pre [(react? react)]}
-  (js/goog.object.set react "shadow$component" data))
+  (gobj/set react "shadow$component" data))
 
 (defn get-ref [react]
   (-> react (get-shadow) (::ref)))
@@ -307,7 +308,7 @@
 
 (defn create-element* [component-fn props children]
   (let [{::keys [type key-fn] :as config}
-        (-> component-fn (js/goog.object.get "shadow$config"))]
+        (-> component-fn (gobj/get "shadow$config"))]
 
     (when-some [props-spec (::props config)]
       (when-not (s/spec? props-spec)
@@ -329,18 +330,18 @@
           #js {:shadow$props final-props}]
 
       (when-let [ref (:react-ref props)]
-        (js/goog.object.set react-props "ref" ref))
+        (gobj/set react-props "ref" ref))
 
       (if key-fn
         (let [key (key-fn props)]
           (when (nil? key)
             (throw (ex-info (str ":key-fn on " type " was set but returned nil") props)))
-          (js/goog.object.set react-props "key" key))
+          (gobj/set react-props "key" key))
 
         (when-let [key (:react-key props)]
-          (js/goog.object.set react-props "key" key)))
+          (gobj/set react-props "key" key)))
 
-      (js/goog.object.set
+      (gobj/set
         react-props
         "children"
         (let [c (bounded-count 2 children)]
@@ -384,21 +385,21 @@
                   data
                   (-> {::config config
                        ::ref ref
-                       ::context (js/goog.object.get context "shadow$context")
+                       ::context (gobj/get context "shadow$context")
                        :prev-props nil
                        :props shadow-props
                        :pending-props shadow-props}
                       (call ::constructor this))]
 
               ;; don't use set-shadow, doesn't survive the react? check
-              (js/goog.object.set this "shadow$component" data))
+              (gobj/set this "shadow$component" data))
 
             this))
 
         display-name
         (subs (str type) 1)]
 
-    (js/goog.object.extend
+    (gobj/extend
       (.. component-fn -prototype)
       js/React.Component.prototype
       (make-component-prototype config))
@@ -413,15 +414,15 @@
         (cljs.core/-write writer display-name)))
     (set! (.. component-fn -prototype -constructor) component-fn)
 
-    (js/goog.object.extend component-fn context-static-props)
+    (gobj/extend component-fn context-static-props)
 
     (when-let [extend (::extend config)]
-      (js/goog.object.extend (.. component-fn -prototype) extend))
+      (gobj/extend (.. component-fn -prototype) extend))
 
     (when-let [static (::static config)]
-      (js/goog.object.extend component-fn static))
+      (gobj/extend component-fn static))
 
-    (js/goog.object.set component-fn "shadow$config" config)
+    (gobj/set component-fn "shadow$config" config)
 
     component-fn
     ))
@@ -437,21 +438,23 @@
           (create-element* component-fn props children))]
 
     ;; shadow$component must be a function since component is initialized lazily in macro
-    (js/goog.object.set factory-fn "shadow$component" #(js/goog.object.get component-fn "shadow$config"))
+    (gobj/set factory-fn "shadow$component" #(gobj/get component-fn "shadow$config"))
 
     factory-fn))
 
 (defn is-shadow-factory? [x]
-  (and (fn? x) (fn? (js/goog.object.get x "shadow$component"))))
+  (and (fn? x) (fn? (gobj/get x "shadow$component"))))
 
-(defn get-factory-config [x]
+(defn get-component-fn [x]
   {:pre [(is-shadow-factory? x)]}
 
-  (let [getter
-        (js/goog.object.get x "shadow$component")]
+  ;; is a function because the macro emits a lazy init for this fn
+  (let [getter (gobj/get x "shadow$component")]
+    (getter)))
 
-    (getter)
-    ))
+(defn get-component-config [x]
+  (-> (get-component-fn x)
+      (gobj/get "shadow$config")))
 
 (defn after
   [config id after-fn]
@@ -503,4 +506,4 @@
    (-> component
        (get-react)
        (.-refs)
-       (js/goog.object.get ref))))
+       (gobj/get ref))))
