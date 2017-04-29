@@ -127,15 +127,9 @@
 (defn router-state? [x]
   (true? (::router-state x)))
 
-(defn install-handler! [match handler]
-  #_ (fn route-handler [vault action]
-    (dispatch-route-handler route vault action route-props)))
-
-(defn remove-handler! [match])
-
 (defn perform-exit
   [{:keys [active-routes] :as router-state}
-   {:keys [match handler exit] :as route}]
+   {:keys [match exit] :as route}]
   {:pre [(router-state? router-state)]}
   (js/console.log "ROUTE-STOP" match route)
   (let [routes-after
@@ -146,9 +140,6 @@
 
     (when (ifn? exit)
       (exit (:props route-level)))
-
-    (when (ifn? handler)
-      (remove-handler! match))
 
     (assoc router-state :active-routes routes-after)))
 
@@ -181,7 +172,7 @@
 
 (defn perform-enter
   [{:keys [vault] :as router-state}
-   {:keys [match handler enter props] :as route}
+   {:keys [match enter props] :as route}
    raw-tokens]
   {:pre [(router-state? router-state)]}
   (js/console.log "ROUTE-START" match route)
@@ -196,9 +187,6 @@
          :id match
          :props route-props
          :route route}]
-
-    (when (some? handler)
-      (install-handler! match handler))
 
     (when (ifn? enter)
       (enter vault route-props))

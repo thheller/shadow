@@ -1,6 +1,6 @@
 (ns shadow.vault.ui.float
   (:refer-clojure :exclude (key))
-  (:require-macros [cljs.core.async.macros :refer (alts!)])
+  (:require-macros [cljs.core.async.macros])
   (:require [shadow.markup.react :as html]
             [shadow.react.component :as comp :refer (deffactory)]
 

@@ -1,6 +1,6 @@
 (ns shadow.vault.ui.dialog
   (:refer-clojure :exclude (key))
-  (:require-macros [cljs.core.async.macros :refer (alts!)])
+  (:require-macros [cljs.core.async.macros])
   (:require [shadow.vault.store :as store :refer (defaction)]
             [shadow.vault.dom :as vdom]
             [shadow.markup.react :as html]
