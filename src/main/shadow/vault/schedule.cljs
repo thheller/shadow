@@ -105,7 +105,7 @@
             (js/console.log "rendered" (count @frame-rendered-ref) "components")
             (finally
               (js/console.timeEnd "render/time")
-              (js/console.groupEnd label)
+              (js/console.groupEnd)
               )))))))
 
 (defn queue-frame! []

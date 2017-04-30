@@ -93,7 +93,7 @@
 (defn ^:export get-from-dom [dom]
   (let [oid (dom/data dom :oid)]
     (when oid
-      (get-by-id (js/parseInt oid)))
+      (get-by-id (js/parseInt oid 10)))
     ))
 
 (defn is-object? [obj-or-dom]
@@ -105,7 +105,7 @@
   (if (satisfies? IObject obj-or-dom)
     (= (-id obj) (-id obj-or-dom))
     (= (-id obj) (when-let [oid (dom/data obj-or-dom :oid)]
-                   (js/parseInt oid)))))
+                   (js/parseInt oid 10)))))
 
 (defn ^:export get-parent [oref]
   (when-let [parent-id (get @instance-parent (-id oref))]

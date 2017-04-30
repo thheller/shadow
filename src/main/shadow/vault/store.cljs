@@ -166,7 +166,7 @@
           (try
             (actual-fn vault action handlers)
             (finally
-              (js/console.groupEnd group-label))
+              (js/console.groupEnd))
             ))))))
 
 (deftype TransactedData

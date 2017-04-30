@@ -42,7 +42,7 @@
   (reify IInputType
     (-decode [this value]
       (when (re-find #"^\d+$" value)
-        (js/parseInt value)))
+        (js/parseInt value 10)))
     (-encode [this val]
       (str val))))
 
