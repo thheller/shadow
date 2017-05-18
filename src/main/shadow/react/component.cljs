@@ -2,7 +2,7 @@
   "EXPERIMENTAL - DO NOT USE"
   (:require-macros [shadow.react.component :as m])
   (:require [cljsjs.react]
-            [cljs.spec :as s]
+            [cljs.spec.alpha :as s]
             [goog.object :as gobj]))
 
 (defonce active-components-ref (volatile! {}))

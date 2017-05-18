@@ -5,6 +5,7 @@
 /checkouts
 /dev-resources/public/js/*
 /out
+/tmp
 /public/cljs
 pom.xml
 pom.xml.asc

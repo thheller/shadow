@@ -6,7 +6,7 @@
             [shadow.markup.css :as css :refer (defstyled)]
             [shadow.dom :as dom]
             [fipp.edn :refer (pprint)]
-            [cljs.spec :as s]))
+            [cljs.spec.alpha :as s]))
 
 ;; (declare render-object)
 (defn render-object [obj])

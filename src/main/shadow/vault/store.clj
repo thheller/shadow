@@ -1,5 +1,5 @@
 (ns shadow.vault.store
-  (:require [clojure.spec :as s]))
+  (:require [clojure.spec.alpha :as s]))
 
 (s/def ::key
   (s/cat
@@ -36,9 +36,9 @@
        (shadow.vault.store/make-key
          ~key-id
          ~(:init key-data)
-         (cljs.spec/spec
+         (cljs.spec.alpha/spec
            ~(:id-spec key-data))
-         (cljs.spec/spec
+         (cljs.spec.alpha/spec
            ~(or (:value-spec key-data)
                 (:spec key-data)))))
     ))
@@ -53,7 +53,7 @@
        (if ~(with-meta 'shadow.vault.env/DEBUG {:tag 'boolean})
          (shadow.vault.store/action-factory ~id
            ~(when spec
-              `(cljs.spec/spec ~spec)))
+              `(cljs.spec.alpha/spec ~spec)))
          (shadow.vault.store/action-factory ~id nil))
        )))
 

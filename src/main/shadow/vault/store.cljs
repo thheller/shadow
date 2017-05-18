@@ -2,7 +2,7 @@
   (:refer-clojure :exclude (empty keys))
   (:require-macros [shadow.vault.store :as m])
   (:require [clojure.set :as set]
-            [cljs.spec :as s]
+            [cljs.spec.alpha :as s]
             [shadow.vault.env :as env]
             [shadow.vault.context :as ctx]
             [shadow.vault.schedule :as schedule]
@@ -436,7 +436,7 @@
     (-lookup data key default)))
 
 (defn do-read [component props-for-read]
-  (let [{::comp/keys [ref]
+  (let [{::comp/keys [ref config]
          ::keys [vault]
          :keys [prev-data]}
         component
@@ -466,7 +466,15 @@
 
     (schedule/unlink-ref-from-keys! ref old-keys)
 
-    ;;(js/console.log "read" (-> component ::comp/config ::comp/type) keys-used (not= prev-data data))
+    (when (::debug config)
+      (js/console.log
+        (::comp/type config)
+        "STORE/READ"
+        {:dirty? (not= prev-data data)
+         :data-before prev-data
+         :data-after data
+         :new-keys new-keys
+         :old-keys old-keys}))
 
     (assoc component
       ::keys-used keys-used
