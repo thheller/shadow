@@ -24,61 +24,63 @@
   (::key props))
 
 (deffactory host
-  (-> {::store/read
-       (fn [this vault {::keys [key] :as props}]
-         (get vault key))
+  ::comp/mixins
+  [store/mixin]
 
-       ::comp/render
-       (fn [{:keys [props data] :as this}]
-         (let [key
-               (::key props)
+  ::store/read
+  (fn [this vault {::keys [key] :as props}]
+    (get vault key))
 
-               {:keys [open anchor float-props]}
-               data]
+  ::comp/render
+  (fn [{:keys [props data] :as this}]
+    (let [key
+          (::key props)
 
-           (when open
-             (html/div #js {:ref "float" :className "float-container"}
-               (let [view-fn (::view props)]
-                 (view-fn (assoc float-props ::key key)))))))
+          {:keys [open anchor float-props]}
+          data]
 
-       ::comp/did-update
-       (fn [{:keys [props data] :as this}]
-         (let [key
-               (::key props)
+      (when open
+        (html/div #js {:ref "float" :className "float-container"}
+          (let [view-fn (::view props)]
+            (view-fn (assoc float-props ::key key)))))))
 
-               float
-               (comp/dom-node this "float")
+  ::comp/did-update
+  (fn [{:keys [props data] :as this}]
+    (let [key
+          (::key props)
 
-               {:keys [anchor open]}
-               data]
+          float
+          (comp/dom-node this "float")
 
-           (when open
-             (let [{:keys [x y w h]} anchor]
-               (pos/at-coordinate float [x (+ y h)]))))
+          {:keys [anchor open]}
+          data]
 
-         this)}
-      (store/component)))
+      (when open
+        (let [{:keys [x y w h]} anchor]
+          (pos/at-coordinate float [x (+ y h)]))))
+
+    this))
 
 (deffactory remote*
-  (-> {::comp/type
-       ::remote
+  ::comp/type
+  ::remote
 
-       ::comp/did-mount
-       (fn [{::comp/keys [context] :keys [props] :as this}]
-         (let [dom (dom/build [:div.float-root])]
-           (dom/append dom)
-           (vdom/mount dom (host props) context)
-           (assoc this ::root dom)))
+  ::comp/did-mount
+  (fn [{::comp/keys [context] :keys [props] :as this}]
+    (let [dom (dom/build [:div.float-root])]
+      (dom/append dom)
+      (vdom/mount dom (host props) context)
+      (assoc this ::root dom)))
 
-       ::comp/will-unmount
-       (fn [{::keys [root] :as this}]
-         (vdom/unmount root)
-         (dom/remove root)
-         (dissoc this ::root))
+  ::comp/will-unmount
+  (fn [{::keys [root] :as this}]
+    (vdom/unmount root)
+    (dom/remove root)
+    (dissoc this ::root))
 
-       ::comp/render
-       (fn [this vault props]
-         nil)}))
+  ::comp/render
+  (fn [this vault props]
+    nil))
 
 (defn remote [float-key float-view props]
   (remote* (assoc props

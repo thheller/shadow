@@ -1,7 +1,7 @@
 (ns shadow.vault.devtools
   (:require [shadow.vault.store :as store :refer (defaction defkey)]
             [shadow.vault.dom :as vdom]
-            [shadow.react.component :as comp]
+            [shadow.react.component :as comp :refer (deffactory)]
             [shadow.markup.react :as html]
             [shadow.markup.css :as css :refer (defstyled)]
             [shadow.dom :as dom]
@@ -112,75 +112,76 @@
     vault))
 
 (def Inspector
-  {::comp/type
-   ::inspector
+  )
 
-   ::store/handlers
-   [inspector-handler]
+(deffactory inspector
+  ::comp/mixins
+  [store/mixin]
+
+  ::comp/type
+  ::inspector
+
+  ::store/handlers
+  [inspector-handler]
 
 
-   ::comp/will-mount
-   (fn [{::store/keys [vault] :as this}]
-     (store/transact! vault [(init)])
-     this)
+  ::comp/will-mount
+  (fn [{::store/keys [vault] :as this}]
+    (store/transact! vault [(init)])
+    this)
 
-   ::store/read
-   (fn [this vault props]
-     (let [{:keys [key] :as settings}
-           (get vault Settings)]
-       {:settings settings
-        :namespaces (get vault Namespaces)
-        :keys (get vault Keys)
-        :key-value (when key (get vault key))}))
+  ::store/read
+  (fn [this vault props]
+    (let [{:keys [key] :as settings}
+          (get vault Settings)]
+      {:settings settings
+       :namespaces (get vault Namespaces)
+       :keys (get vault Keys)
+       :key-value (when key (get vault key))}))
 
-   ::store/render
-   (fn [this vault props
-        {:keys
-         [settings
-          namespaces
-          keys
-          key-value]
-         :as data}]
-     (if-not (:show? settings)
-       (fab {:onClick
-             (fn [e]
-               (store/transact! vault [(toggle)]))}
-         "+")
-
-       (container {}
-         (html/div
-           {:onClick
+  ::store/render
+  (fn [this vault props
+       {:keys
+        [settings
+         namespaces
+         keys
+         key-value]
+        :as data}]
+    (if-not (:show? settings)
+      (fab {:onClick
             (fn [e]
               (store/transact! vault [(toggle)]))}
-           (pr-str settings))
+        "+")
 
-         (browser {}
-           (ns-listing
-             (html/for [ns namespaces]
-               (html/div
-                 {:onClick
-                  (fn [e]
-                    (store/transact! vault [(set-namespace ns)]))}
-                 ns)))
+      (container {}
+        (html/div
+          {:onClick
+           (fn [e]
+             (store/transact! vault [(toggle)]))}
+          (pr-str settings))
 
-           (key-listing
-             (html/for [key keys]
-               (html/div
-                 {:onClick
-                  (fn [e]
-                    (store/transact! vault [(set-key key)]))}
-                 (let [{:keys [tag id]} key]
-                   (pr-str [(name tag) id])))))
+        (browser {}
+          (ns-listing
+            (html/for [ns namespaces]
+              (html/div
+                {:onClick
+                 (fn [e]
+                   (store/transact! vault [(set-namespace ns)]))}
+                ns)))
 
-           )
-         (when key-value
-           (render-object key-value))
-         )))})
+          (key-listing
+            (html/for [key keys]
+              (html/div
+                {:onClick
+                 (fn [e]
+                   (store/transact! vault [(set-key key)]))}
+                (let [{:keys [tag id]} key]
+                  (pr-str [(name tag) id])))))
 
-(def inspector
-  (-> Inspector
-      (store/component)
-      (comp/factory)))
+          )
+        (when key-value
+          (render-object key-value))
+        ))))
 
 (deftype DevVault [delegate]
   store/IBranch
@@ -326,21 +327,22 @@
     ))
 
 (def Dump
-  {::comp/type
-   ::dump
-
-   ::store/read
-   (fn [this vault {:keys [path] :as props}]
-     {:obj (get-in vault path)})
-
-   ::comp/render
-   (fn [this]
-     (render-object (-> this :data :obj)))})
+  )
 
 (def dump
-  (-> Dump
-      (store/component)
-      (comp/factory)))
+  ::comp/mixins
+  [store/mixin]
+
+  ::comp/type
+  ::dump
+
+  ::store/read
+  (fn [this vault {:keys [path] :as props}]
+    {:obj (get-in vault path)})
+
+  ::comp/render
+  (fn [this]
+    (render-object (-> this :data :obj))))
 
 (defn dump-into [host context path]
   (vdom/mount host (dump {:path path}) context))

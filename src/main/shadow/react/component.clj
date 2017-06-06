@@ -1,19 +1,24 @@
 (ns shadow.react.component)
 
 ;; wrapping everything in a delay so things can be removed by Closure if not used
-(defmacro deffactory [name body]
+(defmacro deffactory
+  [name & kv-pairs]
+  (assert (even? (count kv-pairs)))
   (let [type
         (keyword (str *ns*) (str name))
 
         cmp
         (-> (str name "$init")
             (symbol)
-            (with-meta {:tag 'not-native}))]
+            (with-meta {:tag 'not-native}))
+
+        cmp-map
+        (-> (apply array-map kv-pairs)
+            (assoc ::type type))]
 
     ;; FIXME: not proper to introduce a new var but takes care of some DCE issues
     `(do (def ~cmp
-           (-> ~body
-               (assoc :shadow.react.component/type ~type)
+           (-> ~cmp-map
                (shadow.react.component/make-component)
                (delay)))
 

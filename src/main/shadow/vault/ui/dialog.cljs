@@ -33,73 +33,74 @@
   (html/div #js {:className "dialog-footer"} children))
 
 (deffactory host
-  (-> {::store/read
-       (fn [this vault {::keys [key] :as props}]
-         (get vault key))
+  ::comp/mixins
+  [store/mixin]
 
-       ::comp/render
-       (fn [{::store/keys [vault]
-             :keys [props data]
-             :as this}]
-         (let [key
-               (::key props)
+  ::store/read
+  (fn [this vault {::keys [key] :as props}]
+    (get vault key))
 
-               {:keys [open dialog-props]}
-               data]
+  ::comp/render
+  (fn [{::store/keys [vault]
+        :keys [props data]
+        :as this}]
+    (let [key
+          (::key props)
 
-           (when open
-             (html/div nil
-               (html/div #js {:className "dialog-backdrop"
-                              :ref "backdrop"
-                              :onClick
-                              (fn [e]
-                                (.preventDefault e)
-                                (store/transact! vault [($backdrop-click)]))})
+          {:keys [open dialog-props]}
+          data]
 
-               (let [view-fn (::view props)]
-                 (view-fn (assoc dialog-props ::key key)))))))
+      (when open
+        (html/div nil
+          (html/div #js {:className "dialog-backdrop"
+                         :ref "backdrop"
+                         :onClick
+                         (fn [e]
+                           (.preventDefault e)
+                           (store/transact! vault [($backdrop-click)]))})
 
-       ::comp/did-update
-       (fn [{:keys [data prev-data] :as this}]
-         (let [was-open
-               (:open prev-data)
+          (let [view-fn (::view props)]
+            (view-fn (assoc dialog-props ::key key)))))))
 
-               is-open
-               (:open data)]
+  ::comp/did-update
+  (fn [{:keys [data prev-data] :as this}]
+    (let [was-open
+          (:open prev-data)
 
-           (cond
-             (and (not was-open) is-open)
-             (dom/set-style js/document.body {:overflow "hidden"})
+          is-open
+          (:open data)]
 
-             (and was-open (not is-open))
-             (dom/remove-style js/document.body :overflow)
+      (cond
+        (and (not was-open) is-open)
+        (dom/set-style js/document.body {:overflow "hidden"})
 
-             :else
-             nil))
+        (and was-open (not is-open))
+        (dom/remove-style js/document.body :overflow)
 
-         this
-         )}
-      (store/component)
-      ))
+        :else
+        nil))
+
+    this
+    ))
 
 (deffactory remote*
-  {::comp/did-mount
-   (fn [{::comp/keys [context] :keys [props] :as this}]
-     (let [dom (dom/build [:div.dialog-root])]
-       (dom/append dom)
-       (vdom/mount dom (host props) context)
+  ::comp/did-mount
+  (fn [{::comp/keys [context] :keys [props] :as this}]
+    (let [dom (dom/build [:div.dialog-root])]
+      (dom/append dom)
+      (vdom/mount dom (host props) context)
 
-       (assoc this ::root dom)))
+      (assoc this ::root dom)))
 
-   ::comp/will-unmount
-   (fn [{::keys [root] :as this}]
-     (vdom/unmount root)
-     (dom/remove root)
-     (dissoc this ::root))
+  ::comp/will-unmount
+  (fn [{::keys [root] :as this}]
+    (vdom/unmount root)
+    (dom/remove root)
+    (dissoc this ::root))
 
-   ::comp/render
-   (fn [this]
-     nil)})
+  ::comp/render
+  (fn [this]
+    nil))
 
 (defn remote [dialog-key dialog-view props]
   (-> props

@@ -580,7 +580,7 @@
       (render this vault props data)
       )))
 
-(defn component
+(defn mixin
   [{::comp/keys
     [render
      will-receive-props
@@ -619,16 +619,16 @@
       ))
 
 (deffactory root*
-  {::comp/constructor
-   (fn [{::comp/keys [context]
-         :keys [props]
-         :as this}
-        react]
-     (update this ::comp/context assoc ::vault (:vault props)))
+  ::comp/constructor
+  (fn [{::comp/keys [context]
+        :keys [props]
+        :as this}
+       react]
+    (update this ::comp/context assoc ::vault (:vault props)))
 
-   ::comp/render
-   (fn [this]
-     (get-in this [:props :root-el]))})
+  ::comp/render
+  (fn [this]
+    (get-in this [:props :root-el])))
 
 (defn root
   "prefer to inject context directly"

@@ -354,18 +354,17 @@
 
 
 (defn make-component
-  [{::keys
-    [type
-     render
-     rewrite-props]
+  [{::keys [type mixins] :as config}]
+  {:pre [(keyword? type)]}
 
-    :as
-    config}]
-  ;; FIXME: spec for config (must have type and render)
-  {:pre [(keyword? type)
-         (ifn? render)]}
+  (let [{::keys [type render rewrite-props] :as config}
+        (reduce
+          (fn [config mixin]
+            (mixin config))
+          config
+          mixins)
 
-  (let [component-fn
+        component-fn
         (fn component-fn [props context updater]
           ;; CLJS/shadow/react/component.js:527: ERROR - incorrect use of goog.base: First argument must be 'this'.
           ;; goog.base(this$,props,context,updater);
