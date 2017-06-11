@@ -17,7 +17,6 @@ Some useful CLJS things. Stuff I collected over the past few years and use in a 
 - shadow.xhr
 
 ### Experimental (React related, extremely ALPHA)
-- shadow.vault.*
 - shadow.react.*
 
 ### Probably going away
