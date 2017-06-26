@@ -99,6 +99,67 @@
      (add-class el cls)
      (remove-class el cls))))
 
+(defn set-style [el styles]
+  (let [dom (dom-node el)]
+
+    ;; apparently IE10+ allows setting properties to null which has unexpected effects
+    ;; on transition and display.
+    (doseq [[k v] styles]
+      (gs/setStyle dom (name k) (if (nil? v)
+                                  ""
+                                  v)))))
+
+(defn set-attr* [el key value]
+  ;; basically clone of goog.dom.setProperties, but with keywords
+  (case key
+    :id (set! (.-id el) (str value))
+    :class (set! (.-className el) (str value))
+    :for (set! (.-htmlFor el) value)
+    ;; see goog.dom.DIRECT_ATTRIBUTE_MAP_
+    :cellpadding (.setAttribute el "cellPadding" value)
+    :cellspacing (.setAttribute el "cellSpacing" value)
+    :colspan (.setAttribute el "colSpan" value)
+    :frameborder (.setAttribute el "frameBorder" value)
+    :height (.setAttribute el "height" value)
+    :maxlength (.setAttribute el "maxLength" value)
+    :role (.setAttribute el "role" value)
+    :rowspan (.setAttribute el "rowSpan" value)
+    :type (.setAttribute el "type" value)
+    :usemap (.setAttribute el "useMap" value)
+    :valign (.setAttribute el "vAlign" value)
+    :width (.setAttribute el "width" value)
+    :style (cond
+             (nil? value)
+             nil
+
+             (string? value)
+             (.setAttribute el "style" value)
+
+             (map? value)
+             (set-style el value)
+
+             :else
+             (gs/setStyle el value))
+    ;; FIXME: support :style maps
+    (let [ks (name key)]
+      (if (or (gstr/startsWith ks "data-")
+              (gstr/startsWith ks "aria-"))
+        (.setAttribute el ks value)
+        (aset el ks value))))
+  el)
+
+(defn set-attrs [el attrs]
+  (reduce-kv
+    (fn [el key value]
+      ;; use special version, so we don't do (dom-node el) every time
+      (set-attr* el key value)
+      el)
+    (dom-node el)
+    attrs))
+
+(defn set-attr [el key value]
+  (set-attr* (dom-node el) key value))
+
 
 (defn has-class? [el cls]
   (gcls/contains (dom-node el) cls))
@@ -139,16 +200,17 @@
        (str/replace (.substring spec (inc fdot)) #"\." " ")])))
 
 
-(defn create-dom-node [tag-def props]
-  (let [props (clj->js props)
+(defn create-dom-node [tag-def {:keys [class] :as props}]
+  (let [tag-props #js {} ;;  (clj->js props)
         [tag-name tag-id tag-classes] (parse-tag tag-def)]
     (when tag-id
-      (aset props "id" tag-id))
+      (aset tag-props "id" tag-id))
 
     (when tag-classes
-      (aset props "class" (merge-class-string (aget props "class") tag-classes)))
+      (aset tag-props "class" (merge-class-string class tag-classes)))
 
-    (dom/createDom tag-name props)
+    (doto (dom/createDom tag-name tag-props)
+      (set-attrs (dissoc props :class)))
     ))
 
 ;; FIXME: throw on nil? trying to append nil should be an error, not ignored
@@ -308,67 +370,6 @@
 (defn attr
   ([el key] (.getAttribute (dom-node el) (name key)))
   ([el key default] (or (.getAttribute (dom-node el) (name key)) default)))
-
-(defn set-style [el styles]
-  (let [dom (dom-node el)]
-
-    ;; apparently IE10+ allows setting properties to null which has unexpected effects
-    ;; on transition and display.
-    (doseq [[k v] styles]
-      (gs/setStyle dom (name k) (if (nil? v)
-                                  ""
-                                  v)))))
-
-(defn set-attr* [el key value]
-  ;; basically clone of goog.dom.setProperties, but with keywords
-  (case key
-    :id (set! (.-id el) (str value))
-    :class (set! (.-className el) (str value))
-    :for (set! (.-htmlFor el) value)
-    ;; see goog.dom.DIRECT_ATTRIBUTE_MAP_
-    :cellpadding (.setAttribute el "cellPadding" value)
-    :cellspacing (.setAttribute el "cellSpacing" value)
-    :colspan (.setAttribute el "colSpan" value)
-    :frameborder (.setAttribute el "frameBorder" value)
-    :height (.setAttribute el "height" value)
-    :maxlength (.setAttribute el "maxLength" value)
-    :role (.setAttribute el "role" value)
-    :rowspan (.setAttribute el "rowSpan" value)
-    :type (.setAttribute el "type" value)
-    :usemap (.setAttribute el "useMap" value)
-    :valign (.setAttribute el "vAlign" value)
-    :width (.setAttribute el "width" value)
-    :style (cond
-             (nil? value)
-             nil
-
-             (string? value)
-             (.setAttribute el "style" value)
-
-             (map? value)
-             (set-style el value)
-
-             :else
-             (gs/setStyle el value))
-    ;; FIXME: support :style maps
-    (let [ks (name key)]
-      (if (or (gstr/startsWith ks "data-")
-              (gstr/startsWith ks "aria-"))
-        (.setAttribute el ks value)
-        (aset el ks value))))
-  el)
-
-(defn set-attrs [el attrs]
-  (reduce-kv
-    (fn [el key value]
-      ;; use special version, so we don't do (dom-node el) every time
-      (set-attr* el key value)
-      el)
-    (dom-node el)
-    attrs))
-
-(defn set-attr [el key value]
-  (set-attr* (dom-node el) key value))
 
 (defn del-attr [el key]
   (.removeAttribute (dom-node el) (name key)))
