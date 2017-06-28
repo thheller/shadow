@@ -201,7 +201,7 @@
        ;; must set after open
        ;; FIXME: bad for CORS! but who uses http auth for anything serious?
        (set! (.-responseType req) "text")
-       (set! (.-withCredentials req) true)
+       (set! (.-withCredentials req) (not (false? (:with-credentials options))))
 
        (when body?
          (.setRequestHeader req "Content-Type" content-type))

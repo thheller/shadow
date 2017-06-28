@@ -57,6 +57,18 @@
     (number? el) (.createTextNode js/document (str el))
     :else el))
 
+(defn query-one
+  ([sel] (.querySelector js/document sel))
+  ([sel root] (.querySelector (dom-node root) sel)))
+
+(defn query
+  ([sel] (NativeColl. (.querySelectorAll js/document sel)))
+  ([sel root] (NativeColl. (.querySelectorAll (dom-node root) sel))))
+
+(defn by-id
+  ([id el] (.getElementById (dom-node el) id))
+  ([id] (.getElementById js/document id)))
+
 (def build dom-node)
 
 (defn ev-stop
@@ -99,6 +111,52 @@
      (add-class el cls)
      (remove-class el cls))))
 
+;; private, use on
+(def dom-listen
+  (if (or (not (exists? js/document))
+          (.-addEventListener js/document))
+    (fn dom-listen-good [el ev handler]
+      (.addEventListener el ev handler false))
+    (fn dom-listen-ie [el ev handler]
+      (try
+        (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
+        (catch js/Object e
+          (.log js/console "didnt support attachEvent" el e)))
+      )))
+
+;; private, only works if you used dom-listen since on wrap the event handler
+(def dom-listen-remove
+  (if (or (not (exists? js/document))
+          (.-removeEventListener js/document))
+    (fn dom-listen-remove-good [el ev handler]
+      (.removeEventListener el ev handler false))
+    (fn dom-listen-remove-ie [el ev handler]
+      (.detachEvent el (str "on" ev) handler))
+    ))
+;; // private
+
+(defn on-query [root-el ev selector handler]
+  (doseq [el (query selector root-el)]
+    (let [handler (fn [e] (handler e el))]
+      (dom-listen el (name ev) handler))))
+
+(defn on
+  ([el ev handler]
+   (on el ev handler false))
+  ([el ev handler capture]
+   (if (vector? ev)
+     (on-query el (first ev) (second ev) handler)
+     (let [handler (fn [e] (handler e el))]
+       (dom-listen (dom-node el) (name ev) handler)))))
+
+;; only work when used with dom-listen, on will wrap the handler so you can't remove it
+(defn remove-event-handler [el ev handler]
+  (dom-listen-remove (dom-node el) (name ev) handler))
+
+(defn add-event-listeners [el events]
+  (doseq [[k v] events]
+    (on el k v)))
+
 (defn set-style [el styles]
   (let [dom (dom-node el)]
 
@@ -128,6 +186,7 @@
     :usemap (.setAttribute el "useMap" value)
     :valign (.setAttribute el "vAlign" value)
     :width (.setAttribute el "width" value)
+    :on (add-event-listeners el value)
     :style (cond
              (nil? value)
              nil
@@ -277,60 +336,6 @@
     js/DocumentFragment
     (-to-dom [this] this)
     ))
-
-(defn query-one
-  ([sel] (.querySelector js/document sel))
-  ([sel root] (.querySelector (dom-node root) sel)))
-
-(defn query
-  ([sel] (NativeColl. (.querySelectorAll js/document sel)))
-  ([sel root] (NativeColl. (.querySelectorAll (dom-node root) sel))))
-
-;; private, use on
-(def dom-listen
-  (if (or (not (exists? js/document))
-          (.-addEventListener js/document))
-    (fn dom-listen-good [el ev handler]
-      (.addEventListener el ev handler false))
-    (fn dom-listen-ie [el ev handler]
-      (try
-        (.attachEvent el (str "on" ev) (fn [e] (handler e el)))
-        (catch js/Object e
-          (.log js/console "didnt support attachEvent" el e)))
-      )))
-
-;; private, only works if you used dom-listen since on wrap the event handler
-(def dom-listen-remove
-  (if (or (not (exists? js/document))
-          (.-removeEventListener js/document))
-    (fn dom-listen-remove-good [el ev handler]
-      (.removeEventListener el ev handler false))
-    (fn dom-listen-remove-ie [el ev handler]
-      (.detachEvent el (str "on" ev) handler))
-    ))
-;; // private
-
-(defn on-query [root-el ev selector handler]
-  (doseq [el (query selector root-el)]
-    (let [handler (fn [e] (handler e el))]
-      (dom-listen el (name ev) handler))))
-
-(defn on
-  ([el ev handler]
-   (on el ev handler false))
-  ([el ev handler capture]
-   (if (vector? ev)
-     (on-query el (first ev) (second ev) handler)
-     (let [handler (fn [e] (handler e el))]
-       (dom-listen (dom-node el) (name ev) handler)))))
-
-;; only work when used with dom-listen, on will wrap the handler so you can't remove it
-(defn remove-event-handler [el ev handler]
-  (dom-listen-remove (dom-node el) (name ev) handler))
-
-(defn by-id
-  ([id el] (.getElementById (dom-node el) id))
-  ([id] (.getElementById js/document id)))
 
 (defn reset
   "clear node children"
