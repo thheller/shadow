@@ -1,7 +1,11 @@
 (ns shadow.react.component
   "EXPERIMENTAL - DO NOT USE"
   (:require-macros [shadow.react.component :as m])
-  (:require [cljsjs.react]
+  (:require ["react" :as react]
+    ;; FIXME: this should not depend on react-dom
+    ;; but I don't care about SSR for now
+            ["react-dom" :as rdom]
+            ["prop-types" :as prop-types]
             [cljs.spec.alpha :as s]
             [goog.object :as gobj]))
 
@@ -205,11 +209,11 @@
 (def context-static-props
   #js {:childContextTypes
        #js {:shadow$context
-            js/React.PropTypes.object}
+            prop-types/object}
 
        :contextTypes
        #js {:shadow$context
-            js/React.PropTypes.object}})
+            prop-types/object}})
 
 ;; FIXME: create fast accessors for functions that are frequently called
 ;; so (call ::process-props) doesn't do a prop access to get the data
@@ -320,8 +324,8 @@
         (s/explain props-spec props)
         (throw (ex-info (str "invalid props for component " type)
                  (assoc (s/explain-data props-spec props)
-                   ::type type
-                   ::props props)))))
+                        ::type type
+                        ::props props)))))
 
     (let [final-props
           (dissoc props :react-key :react-ref)
@@ -350,7 +354,7 @@
             1 (first children)
             children)))
 
-      (js/React.createElement component-fn react-props))))
+      (react/createElement component-fn react-props))))
 
 
 (defn make-component
@@ -370,7 +374,7 @@
           ;; goog.base(this$,props,context,updater);
 
           (cljs.core/this-as this
-            (js/React.Component.call this props context updater)
+            (react/Component.call this props context updater)
 
             (let [ref
                   (ShadowRef. type (vswap! id-seq-ref inc))
@@ -400,7 +404,7 @@
 
     (gobj/extend
       (.. component-fn -prototype)
-      js/React.Component.prototype
+      react/Component.prototype
       (make-component-prototype config))
 
     (set! (.. component-fn -displayName) display-name)
@@ -462,24 +466,24 @@
       (assoc config id after-fn)
 
       (assoc config id
-        (fn
-          ([this]
-           (-> this
-               (actual-fn)
-               (after-fn)))
-          ([this a1]
-           (-> this
-               (actual-fn a1)
-               (after-fn a1)))
-          ([this a1 a2]
-           (-> this
-               (actual-fn a1 a2)
-               (after-fn a1 a2)))
-          ([this a1 a2 & more]
-           (as-> this this
-             (apply actual-fn this a1 a2 more)
-             (apply after-fn this a1 a2 more)))
-          )))))
+             (fn
+               ([this]
+                (-> this
+                    (actual-fn)
+                    (after-fn)))
+               ([this a1]
+                (-> this
+                    (actual-fn a1)
+                    (after-fn a1)))
+               ([this a1 a2]
+                (-> this
+                    (actual-fn a1 a2)
+                    (after-fn a1 a2)))
+               ([this a1 a2 & more]
+                (as-> this this
+                  (apply actual-fn this a1 a2 more)
+                  (apply after-fn this a1 a2 more)))
+               )))))
 
 (defn get-react [x]
   (cond
@@ -499,7 +503,7 @@
   ([component]
    (-> component
        (get-react)
-       (js/ReactDOM.findDOMNode)))
+       (rdom/findDOMNode)))
   ([component ref]
    {:pre [(string? ref)]}
    (-> component

@@ -1,8 +1,9 @@
 (ns shadow.markup.react.impl.interop
-  (:require [goog.object :as gobj]))
+  (:require [goog.object :as gobj]
+            ["react" :as react]))
 
 (def ^{:private true} element-marker
-  (-> (js/React.createElement "div" nil)
+  (-> (react/createElement "div" nil)
       (gobj/get "$$typeof")))
 
 (defn element? [x]
@@ -34,7 +35,7 @@
 
   ;; FIXME: create low level version that directly creates a JS object instead
   ;; createElement needlessly copies props to extra ref/key
-  (js/React.createElement type props))
+  (react/createElement type props))
 
 ;; fallback if the macro didn't do this
 (defn create-element [type args]
