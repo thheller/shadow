@@ -6,7 +6,7 @@ Some useful CLJS things. Stuff I collected over the past few years and use in a 
 ## Current version
 
 ```clojure
-[thheller/shadow-client "1.0.186"]
+[thheller/shadow-client "1.1.0"]
 ```
 
 ## Useful and Current
