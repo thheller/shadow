@@ -4,10 +4,7 @@
   (:require-macros [shadow.markup.react :as m])
   ;; macro requires this
   (:require [shadow.markup.react.impl.interop :as interop]
-            [shadow.markup.css :as css])
-  ;; assume this is provided somewhere else
-  ;; (:require [cljsjs.react])
-  )
+            [shadow.markup.css :as css]))
 
 (defn for [& args]
   (throw (ex-info "shadow.markup.react/for is a macro" {})))

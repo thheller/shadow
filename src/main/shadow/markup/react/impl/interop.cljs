@@ -19,41 +19,51 @@
     :else
     props))
 
-;; called from macro
-;; type is a string
-;; props is a js object
-;; children is an array
-(defn create-element* [type props children]
-  (gobj/set
-    props
-    "children"
-    (let [c (count children)]
-      (condp = c
-        0 nil
-        1 (first children)
-        children)))
+(extend-type js/Symbol
+  IPrintWithWriter
+  (-pr-writer [sym w o]
+    (-write w (.toString sym))))
 
-  ;; FIXME: create low level version that directly creates a JS object instead
-  ;; createElement needlessly copies props to extra ref/key
-  (react/createElement type props))
+;; called from macro
+;; react v16 is really picky, the old direct .children prop trick no longer works
+(defn create-element* [arr]
+  {:pre [(array? arr)]}
+  (.apply react/createElement nil arr))
+
+(defn arr-append* [arr x]
+  (.push arr x)
+  arr)
+
+(defn arr-append [arr tail]
+  (reduce arr-append* arr tail))
 
 ;; fallback if the macro didn't do this
 (defn create-element [type args]
   (let [[head & tail] args]
     (cond
       (map? head)
-      (create-element* type (convert-props head) tail)
+      (create-element*
+        (doto #js [type (convert-props head)]
+          (arr-append tail)))
 
       (nil? head)
-      (create-element* type #js {} tail)
+      (create-element*
+        (doto #js [type nil]
+          (arr-append tail)))
 
       (element? head)
-      (create-element* type #js {} args)
+      (create-element*
+        (doto #js [type nil]
+          (arr-append args)))
 
       (object? head)
-      (create-element* type head tail)
+      (create-element*
+        (doto #js [type head]
+          (arr-append tail)))
 
       :else
-      (create-element* type #js {} args)
+      (create-element*
+        (doto #js [type nil]
+          (arr-append args)))
       )))
 

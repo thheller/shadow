@@ -4,7 +4,7 @@
             [shadow.markup.css.impl.gen :as gen]
             [shadow.markup.env :as env]
             [shadow.dom :as dom]
-            [goog.async.nextTick]))
+            ["react" :as react]))
 
 (defonce env-ref (volatile! {}))
 
@@ -142,20 +142,21 @@
         (assoc :className className)
         (interop/convert-props))))
 
-(defn styled-element-invoke [el props children]
-  ;; style-fn is replaced after it is run once
+(defn styled-element-invoke [el props ^js args]
   (when (not (.-injected? el))
     (inject-rules! el)
     (set! (.-injected? el) true))
 
-  (let [css-sel
-        (gen/el-selector el)
+  (let [css-sel (gen/el-selector el)
+        el-type (gen/el-type el)]
 
-        el-type
-        (gen/el-type el)]
     (if (map? props)
-      (interop/create-element* el-type (merge-props-and-class props css-sel) children)
-      (interop/create-element* el-type #js {:className css-sel} (cons props children)))))
+      (.unshift args (merge-props-and-class props css-sel))
+      (do (.unshift args props)
+          (.unshift args nil)))
+
+    (.unshift args el-type)
+    (.apply react/createElement nil args)))
 
 (deftype StyledElement
   [el-type css-sel style-fn ^:mutable injected?]
@@ -169,38 +170,38 @@
 
   IFn
   (-invoke [el props]
-    (styled-element-invoke el props []))
+    (styled-element-invoke el props #js []))
   (-invoke [el props c1]
-    (styled-element-invoke el props [c1]))
+    (styled-element-invoke el props #js [c1]))
   (-invoke [el props c1 c2]
-    (styled-element-invoke el props [c1 c2]))
+    (styled-element-invoke el props #js [c1 c2]))
   (-invoke [el props c1 c2 c3]
-    (styled-element-invoke el props [c1 c2 c3]))
+    (styled-element-invoke el props #js [c1 c2 c3]))
   (-invoke [el props c1 c2 c3 c4]
-    (styled-element-invoke el props [c1 c2 c3 c4]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4]))
   (-invoke [el props c1 c2 c3 c4 c5]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5]))
   (-invoke [el props c1 c2 c3 c4 c5 c6]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15]))
   (-invoke [el props c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]
-    (styled-element-invoke el props [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]))
+    (styled-element-invoke el props #js [c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16]))
   ;; FIXME: add more
   )

@@ -151,13 +151,13 @@
 
        (cond
          (instance? JSValue head#)
-         `(shadow.markup.react.impl.interop/create-element* ~tag# ~head# ~(JSValue. tail#))
+         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# head#] tail#)))
 
          (map? head#)
-         `(shadow.markup.react.impl.interop/create-element* ~tag# ~(JSValue. head#) ~(JSValue. tail#))
+         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# (JSValue. head#)] tail#)))
 
          (= 'nil head#)
-         `(shadow.markup.react.impl.interop/create-element* ~tag# ~(JSValue. {}) ~(JSValue. tail#))
+         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# nil] tail#)))
 
          :else
          `(shadow.markup.react.impl.interop/create-element ~tag# ~(JSValue. args#))
