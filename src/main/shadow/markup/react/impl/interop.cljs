@@ -19,11 +19,6 @@
     :else
     props))
 
-(extend-type js/Symbol
-  IPrintWithWriter
-  (-pr-writer [sym w o]
-    (-write w (.toString sym))))
-
 ;; called from macro
 ;; react v16 is really picky, the old direct .children prop trick no longer works
 (defn create-element* [arr]
