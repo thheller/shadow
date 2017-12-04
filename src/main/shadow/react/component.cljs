@@ -345,16 +345,12 @@
         (when-let [key (:react-key props)]
           (gobj/set react-props "key" key)))
 
-      (gobj/set
-        react-props
-        "children"
-        (let [c (bounded-count 2 children)]
-          (condp = c
-            0 nil
-            1 (first children)
-            children)))
-
-      (react/createElement component-fn react-props))))
+      ;; react v16 is really picky about children
+      ;; so we need to call createElement as intended
+      (let [args (into-array children)]
+        (.unshift args react-props)
+        (.unshift args component-fn)
+        (.apply react/createElement nil args)))))
 
 
 (defn make-component

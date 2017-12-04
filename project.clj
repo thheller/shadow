@@ -1,4 +1,4 @@
-(defproject thheller/shadow-client "1.2.1"
+(defproject thheller/shadow-client "1.3.0"
   :description "a cljs library for managed state in the shadows of the DOM"
   :url "http://github.com/thheller/shadow"
   :license {:name "Eclipse Public License"
