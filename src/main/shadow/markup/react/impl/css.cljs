@@ -153,7 +153,7 @@
     (if (map? props)
       (.unshift args (merge-props-and-class props css-sel))
       (do (.unshift args props)
-          (.unshift args nil)))
+          (.unshift args #js {:className css-sel})))
 
     (.unshift args el-type)
     (.apply react/createElement nil args)))

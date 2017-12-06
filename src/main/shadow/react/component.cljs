@@ -345,6 +345,9 @@
         (when-let [key (:react-key props)]
           (gobj/set react-props "key" key)))
 
+      (when-let [props-fn (::props-rewrite config)]
+        (props-fn config props react-props))
+
       ;; react v16 is really picky about children
       ;; so we need to call createElement as intended
       (let [args (into-array children)]
@@ -422,6 +425,9 @@
       (gobj/extend component-fn static))
 
     (gobj/set component-fn "shadow$config" config)
+
+    (doseq [spec (::specify config)]
+      (spec component-fn))
 
     component-fn
     ))
