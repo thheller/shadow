@@ -19,7 +19,7 @@
          (= 1 (count args))]}
 
   (let [el-selector (gen/gen-el-selector *ns* el-name)]
-    `(def ~(vary-meta el-name assoc :shadow.markup.css/element true)
+    `(def ~(vary-meta el-name assoc :shadow/dom-fn true :shadow.markup.css/element true)
        (element*
          ~(name el-type)
          ~el-selector

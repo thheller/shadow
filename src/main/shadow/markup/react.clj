@@ -1,5 +1,6 @@
 (ns shadow.markup.react
   (:refer-clojure :exclude [for map meta time])
+  (:require [cljs.analyzer :as ana])
   (:import (cljs.tagged_literals JSValue)))
 
 ;; will eventually become the main macro, for now just alias
@@ -144,9 +145,22 @@
      arr#
      ))
 
+(defn maybe-nested-jsvalue [{:keys [style] :as x}]
+  (-> x
+      (cond->
+        (and style (map? style))
+        (assoc :style (JSValue. style)))
+      (JSValue.)))
+
+(defn dom-fn? [env [x & more :as form]]
+  (and (symbol? x)
+       (let [var (ana/resolve-var env x)]
+         (and var (get-in var [:meta :shadow/dom-fn])))))
+
 (defn gen-dom-macro [name]
   `(defmacro ~name [& args#]
-     (let [tag# ~(str name)
+     (let [env# ~'&env
+           tag# ~(str name)
            [head# & tail#] args#]
 
        (cond
@@ -154,10 +168,18 @@
          `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# head#] tail#)))
 
          (map? head#)
-         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# (JSValue. head#)] tail#)))
+         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# (maybe-nested-jsvalue head#)] tail#)))
 
          (= 'nil head#)
          `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# nil] tail#)))
+
+         (string? head#)
+         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# nil head#] tail#)))
+
+         ;; this is over-optimizing but it will be a very frequent occurence we can optimize
+         (and (list? head#)
+              (dom-fn? env# head#))
+         `(shadow.markup.react.impl.interop/create-element* ~(JSValue. (into [tag# nil head#] tail#)))
 
          :else
          `(shadow.markup.react.impl.interop/create-element ~tag# ~(JSValue. args#))
@@ -169,7 +191,7 @@
 (define-element-macro)
 
 (defn ^:private gen-dom-fn [tag]
-  `(defn ~tag
+  `(defn ~(with-meta tag {:shadow/dom-fn true})
      [& args#]
      (shadow.markup.react.impl.interop/create-element ~(name tag) args#)))
 
