@@ -26,7 +26,7 @@
   (= js/goog.result.Result.State.SUCCESS (.getState res)))
 
 (defn result-value [res]
-  (.getValue res))
+  (.getValue ^goog res))
 
 (defn result-immediate [value]
   (gresult/successfulResult value))
