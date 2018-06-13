@@ -142,7 +142,7 @@
         (assoc :className className)
         (interop/convert-props))))
 
-(defn styled-element-invoke [el props ^js args]
+(defn styled-element-invoke [^clj el props ^js args]
   (when (not (.-injected? el))
     (inject-rules! el)
     (set! (.-injected? el) true))
