@@ -130,7 +130,7 @@
            `(shadow.spec/->MapSpec ~map-entries ~defined-keys ~closed?)))))
 
 (comment
-  (s/def ::y (map-spec :req {:foo string?} :closed? true))
+  (s/def ::y (map-spec :req {:foo string? "bar" string?} :closed? true))
 
   (s/explain ::y {:foo "1" :x 1}))
 

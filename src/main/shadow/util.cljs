@@ -1,6 +1,5 @@
 (ns shadow.util
-  (:require-macros [shadow.util :as m])
-  (:require [cljs.core.async :as async])) ;; not really used here, but the go! macro needs this
+  (:require-macros [shadow.util :as m]))
 
 (defn console-friendly [a]
   (cond
@@ -11,9 +10,6 @@
    (satisfies? IPrintWithWriter a) (pr-str a)
    :else a
    ))
-
-(defn go! [& body]
-  (throw (ex-info "go! is a macro" {})))
 
 (def console? (exists? js/console))
 
